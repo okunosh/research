@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import math
 
 #Zardi et al. 2014
 deg2rad = np.pi / 180
