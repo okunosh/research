@@ -1,0 +1,10 @@
+import matplotlib.pyplot as plt
+import numpy as np
+
+#Earth
+etheta0, eg, eK, egamma = 293, 9.81, 10, 0.004
+alpha1 = 0.5
+theta_s = 20
+
+#Mars
+mtheta0, mg, mK, mgamma = 210, 3.72, 10, 0.004
