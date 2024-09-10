@@ -1,0 +1,64 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import itertools
+from wave_resolutions import WaveResolutions  # クラスをインポート
+
+# パラメータのリストを用意
+alpha_deg_values = [30, 45]
+Theta_values = [5, 6]
+theta_0_values = [288, 290]
+gamma_values = [3.e-3]
+omega_values = [7.28e-5]
+K_values = [3, 4]
+omega_t_values = [np.pi/4, np.pi/6]
+psi_values = [0]
+
+# 全組み合わせを生成
+param_combinations = itertools.product(
+    alpha_deg_values, 
+    Theta_values, 
+    theta_0_values, 
+    gamma_values, 
+    omega_values, 
+    K_values, 
+    omega_t_values, 
+    psi_values
+)
+
+# 各組み合わせで計算
+results = []
+n_values = np.linspace(0, 200, 1000)
+
+for combination in param_combinations:
+    params = {
+        'alpha_deg': combination[0],
+        'Theta': combination[1],
+        'theta_0': combination[2],
+        'gamma': combination[3],
+        'omega': combination[4],
+        'K': combination[5],
+        'omega_t': combination[6],
+        'psi': combination[7],
+        'n': n_values,
+    }
+    wave = WaveResolutions(**params)
+    results.append({
+        'params': params,
+        'u_bar': wave.u_bar,
+        'theta_bar': wave.theta_bar,
+        'l_plus': wave.l_plus,
+        'l_minus': wave.l_minus,
+        'N': wave.N
+    })
+
+# 結果のプロット
+for result in results:
+    params = result['params']
+    label = f"alpha={params['alpha_deg']}, Theta={params['Theta']}"
+    plt.plot(result['u_bar'], result['theta_bar'], label=label)
+
+plt.legend()
+plt.xlabel('u_bar')
+plt.ylabel('theta_bar')
+plt.title('Comparison of Wave Resolutions')
+plt.show()
