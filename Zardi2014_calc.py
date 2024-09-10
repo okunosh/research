@@ -10,7 +10,7 @@ theta_0_values = [288]
 gamma_values = [3.e-3]
 omega_values = [7.28e-5]
 K_values = [3]
-omega_t_values = [np.pi/4]
+omega_t_values = [np.pi/4, 1.5*np.pi]
 psi_values = [0]
 
 # 全組み合わせを生成
@@ -55,7 +55,9 @@ for combination in param_combinations:
 for result in results:
     params = result['params']
     label = f"alpha={params['alpha_deg']}, Theta={params['Theta']}"
+    
     plt.plot(result['u_bar'], n_values, color='darkblue', label='u($\omega$t={})'.format(round(params['omega_t'],2)))# result['theta_bar'], label=label)
+    
     plt.plot(result['theta_bar'], n_values, color='red', label=r'$\theta$($\omega$t={})'.format(round(params['omega_t'],2)))
 
 plt.legend()

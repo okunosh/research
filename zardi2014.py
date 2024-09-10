@@ -1,6 +1,8 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
+
+"""
 #Zardi et al. 2014
 def resolutions(alpha_deg, Theta, theta_0, gamma, omega, K, n, omega_t, psi=0):
     
