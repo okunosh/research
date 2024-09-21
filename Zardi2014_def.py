@@ -15,7 +15,7 @@ class WaveResolutions:
 
         self.deg2rad = np.pi / 180
         self.alpha = alpha_deg * self.deg2rad
-        self.g = 9.81
+        self.g = 3.72#9.81
 
         self.N = np.sqrt(gamma * self.g / theta_0)
         self.N_alpha = self.N * np.sin(self.alpha)
