@@ -15,7 +15,13 @@ class WaveResolutions:
 
         self.deg2rad = np.pi / 180
         self.alpha = alpha_deg * self.deg2rad
+
         self.g = g
+        if self.g == 9.81:
+            self.planet = "Earth"
+        if self.g == 3.72:
+            self.planet = "Mars"
+
 
         self.N = np.sqrt(gamma * self.g / theta_0)
         self.N_alpha = self.N * np.sin(self.alpha)
@@ -67,6 +73,7 @@ class WaveResolutions:
 
         t = self.omega_t / self.omega
         output= {"regime":regime,
+                 "planet":self.planet,
                  "altitude":alt,
                  "t": t,
                  "u_bar":u_bar.reshape(self.num,1),

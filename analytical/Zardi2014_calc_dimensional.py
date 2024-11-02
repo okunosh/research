@@ -1,5 +1,7 @@
 import numpy as np
-import matplotlib.pyplot as plt
+import os
+import sys
+#import matplotlib.pyplot as plt
 import xarray as xr
 from importlib import reload
 from datetime import datetime
@@ -7,80 +9,22 @@ import Zardi2014_def
 reload(Zardi2014_def)
 from Zardi2014_def import WaveResolutions
 
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from data_to_netcdf import DatasetToNetcdf
 
-def calculation(g, alpha_deg, Theta, theta_0, gamma, omega, K, omega_t_value, num, psi=0):
+class ExtendedDatasetToNetcdf(DatasetToNetcdf):
+    @staticmethod
+    def make_Dataset(wave):
+        ds = DatasetToNetcdf.make_Dataset(wave)
+        ds = ds.assign(psi=(["time"], np.array([wave.psi]), {"description": "initial phase"}))
+        print(ds)
+        return ds
+
+def calculation(g,  alpha_deg, Theta, theta_0, gamma, omega, K, omega_t_value, num, psi=0):
     wave = WaveResolutions(g, alpha_deg, Theta, theta_0, gamma, omega, K, omega_t_value, num, psi)
     return wave
 
-def make_Dataset(wave):
-    ds = xr.Dataset(
-        data_vars=dict(
-            u_bar=(["altitude", "time"], wave.resolutions()["u_bar"], {"unit":"m/s", "description":"along slope velocity"}),
-            theta_bar = (["altitude", "time"], wave.resolutions()["theta_bar"], {"unit": "kelvin", "description":"mean potential temperature anomaly"}),
-            K = (["time"], np.array([wave.K]), {"unit": "m^2 s^-1", "description":"diffusion coefficient"}),
-            alpha = (["time"], np.array([wave.alpha_deg]), {"unit": "degree", "description":"slope angle"}),
-            theta_0 = (["time"], np.array([wave.theta_0]), {"description":""}),
-            Theta = (["time"], np.array([wave.Theta]), {"description":""}),
-            gamma = (["time"], np.array([wave.gamma]), {"description":"vertical gradient of potential temperature"}), 
-            N = (["time"], np.array([wave.N]), {"description": "Bulant-Visala"}),
-            N_alpha = (["time"], np.array([wave.N_alpha]),{"description":"Bulant-Visala along slope"}),
-            omega = (["time"], np.array([wave.omega]), {"description":"angular frequency"}),
-            omega_plus = (["time"], np.array([wave.omega_plus]), {"description":""}),
-            omega_minus = (["time"], np.array([wave.omega_minus]), {"description":""}),
-            l_plus = (["time"], np.array([wave.l_plus]), {"description":""}),
-            l_minus = (["time"], np.array([wave.l_minus]), {"description":""}),
-            psi = (["time"], np.array([wave.psi]), {"description":"initial phase"})                                   
-            ),
-        coords = dict(
-            altitude = ("altitude", wave.resolutions()["altitude"], {"unit":"meters"}),
-            time = ("time", np.array([wave.resolutions()["t"]]), {"unit":"seconds"})
-            ),
-        attrs = dict(title="analytical solution",
-            institution="KSU/sci",
-            planet=planet,
-            flow_regime=wave.resolutions()["regime"],
-            history=f"Created on {datetime.now().isoformat()}",
-            reference="Zardi et al. (2014), DOI:10.1002/qj.2485"
-            ),
-      )
-    return ds
 
-def padded_time(time):
-    str_time = str(time).replace('.', '-')
-    if len(str_time) <= 6:
-        padded_time = f"{time:07}"
-        return padded_time
-    else:
-        return str_time
-
-def make_new_dir(ds, output_path):
-    time = datetime.now().strftime('%Y%m%dT%H%M%S')
-    num = str(ds.altitude.shape[0])
-    K = str(ds.K.values[0]).replace('.', '-') 
-    alpha = str(ds.alpha.values[0]).replace('.', '-')
-    gamma = f"{ds.gamma.values[0]:.2e}"
-    gamma_base, gamma_exp = gamma.split("e")
-    gamma = gamma_base.replace('.', '-') 
-    new_dir_path = f"output_path/{time}_{ds.flow_regime}}_num{num}_K{K}_alp{alpha}_gamma{gamma}"
-    os.makedirs(new_dir_path, exist_ok=True)
-    
-def save_to_netcdf(ds, output_path): #output/results/
-    kind = "A"#"analytical"
-    now = datetime.now().strftime('%Y%m%dT%H%M%S')
-    time = padded_time(ds.time.values[0])
-    num = str(ds.altitude.shape[0])
-    K = str(ds.K.values[0]).replace('.', '-') 
-    alpha = str(ds.alpha.values[0]).replace('.', '-')
-    gamma = f"{ds.gamma.values[0]:.2e}"
-    gamma_base, gamma_exp = gamma.split("e")
-    gamma = gamma_base.replace('.', '-') 
-    theta_0 = str(ds.theta_0.values[0]).replace('.', '-')
-    Theta = str(ds.Theta.values[0]).replace('.', '-')
-    
-    output_file = f"{output_path}/{ds.planet}/{kind}_{now}_t{time}_{ds.flow_regime}_num{num}_K{K}_{alpha}deg_{gamma}.nc"
-
-    ds.to_netcdf(output_file)
-        
 
 if __name__ == "__main__":
         #Parameters
@@ -90,7 +34,7 @@ if __name__ == "__main__":
         K = 3.
         
         #Earth parameters----------
-        planet = "Earth"
+        #planet = "Earth"
         g = 9.81
         omega = 7.28e-5 #2*pi /86400
         theta_0 = 288.
@@ -104,18 +48,24 @@ if __name__ == "__main__":
         #theta_0 = 210
         #gamma = 4.5e-3
         """
-        
-        print(planet)
+
         #time parameters------------
         #omega_t_values = [0, 0.25*np.pi, 0.5*np.pi, 0.75*np.pi, np.pi, 1.25*np.pi, 1.5*np.pi, 1.75*np.pi, 2*np.pi]
         omega_t_values = omega * np.arange(0, 3600*24+1, 3600)
         psi = 0.
+
+        #path
+        output_path ="output/results"
         
         for j in range(len(omega_t_values)):
-            wave = calculation(g, alpha_deg, Theta, theta_0, gamma, omega, K, omega_t_values[j], num) 
-            ds = make_Dataset(wave)
-            save_to_netcdf(ds, "output/results")
-
+            wave = calculation(g, alpha_deg, Theta, theta_0, gamma, omega, K, omega_t_values[j], num, psi)
+            ds = ExtendedDatasetToNetcdf.make_Dataset(wave)
+            data = ExtendedDatasetToNetcdf(ds)
+            if j==0:
+                new_dir_path = data.make_new_dir_path(output_path)
+                data.make_new_dir(new_dir_path)
+            data.save_to_netcdf(new_dir_path)
+            
 # #Plot
 # t_vals = np.arange(0, 2.1, 0.25) * np.pi / wave.omega
 # t_vals = np.arange(0, 3600*24+1, 10800)/wave.omega 
