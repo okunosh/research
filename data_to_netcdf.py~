@@ -1,0 +1,45 @@
+import xarray as xr
+from datetime import datetime
+
+class DatasetToNetcdf:
+    def __init__(self, ds):
+        self.ds = ds
+        self.now = datetime.now()
+        self.K = self.format_value(ds.K.values[0])
+
+
+        @staticmethod
+        def make_Dataset(wave):
+            ds = xr.Dataset(
+                data_vars=dict(
+                    u_bar=(["altitude", "time"], wave.resolutions()["u_bar"], {"unit":"m/s", "description":"along slope velocity"}),
+                    theta_bar = (["altitude", "time"], wave.resolutions()["theta_bar"], {"unit": "kelvin", "description":"mean potential temperature anomaly"}),
+                    K = (["time"], np.array([wave.K]), {"unit": "m^2 s^-1", "description":"diffusion coefficient"}),
+                    alpha = (["time"], np.array([wave.alpha_deg]), {"unit": "degree", "description":"slope angle"}),
+                    theta_0 = (["time"], np.array([wave.theta_0]), {"description":""}),
+                    Theta = (["time"], np.array([wave.Theta]), {"description":""}),
+                    gamma = (["time"], np.array([wave.gamma]), {"description":"vertical gradient of potential temperature"}), 
+                    N = (["time"], np.array([wave.N]), {"description": "Bulant-Visala"}),
+                    N_alpha = (["time"], np.array([wave.N_alpha]),{"description":"Bulant-Visala along slope"}),
+                    omega = (["time"], np.array([wave.omega]), {"description":"angular frequency"}),
+                    omega_plus = (["time"], np.array([wave.omega_plus]), {"description":""}),
+                    omega_minus = (["time"], np.array([wave.omega_minus]), {"description":""}),
+                    l_plus = (["time"], np.array([wave.l_plus]), {"description":""}),
+                    l_minus = (["time"], np.array([wave.l_minus]), {"description":""}),
+                    #psi = (["time"], np.array([wave.psi]), {"description":"initial phase"})                                   
+                    ),
+                coords = dict(
+                    altitude = ("altitude", wave.resolutions()["altitude"], {"unit":"meters"}),
+                    time = ("time", np.array([wave.resolutions()["t"]]), {"unit":"seconds"})
+                    ),
+                attrs = dict(
+                    title="analytical solution",
+                    institution="KSU/sci",
+                    planet=planet,
+                    flow_regime=wave.resolutions()["regime"],
+                    history=f"Created on {datetime.now().isoformat()}",
+                    reference="Zardi et al. (2014), DOI:10.1002/qj.2485"
+                    ),
+            )
+            return ds
+            
