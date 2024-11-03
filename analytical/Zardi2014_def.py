@@ -72,8 +72,8 @@ class WaveResolutions:
             theta_bar = self.const_theta * ( (np.exp(-self.n / self.l_plus) * np.sin(self.omega_t - self.n / self.l_plus + psi))+(np.exp(-self.n / self.l_minus) * np.sin(self.omega_t + self.n / self.l_minus + psi)) )
 
         t = self.omega_t / self.omega
-        output= {"regime":regime,
-                 "planet":self.planet,
+        output= {"planet":self.planet,
+                 "regime":regime,
                  "altitude":alt,
                  "t": t,
                  "u_bar":u_bar.reshape(self.num,1),
