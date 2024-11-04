@@ -4,11 +4,11 @@ import itertools
 from Zardi2014_def import WaveResolutions
 
 # パラメータのリストを用意
-alpha_deg_values = [0.41]
+alpha_deg_values = [30]
 Theta_values = [5]
 theta_0_values = [288]
 gamma_values = [3.e-3]
-omega_values = [7.28e-5]
+omega_values = [7.23e-5]#[7.28e-5]
 K_values = [3]
 omega_t_values = [0, 0.25*np.pi, 0.5*np.pi, 0.75*np.pi, np.pi, 1.25*np.pi, 1.5*np.pi, 1.75*np.pi, 2*np.pi]
 psi_values = [0]
