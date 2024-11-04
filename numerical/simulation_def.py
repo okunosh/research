@@ -51,11 +51,11 @@ class NumericalDatasetToNetcdf(DatasetToNetcdf):
         return new_dir_path
 
     
-    def save_to_netcdf(sim, new_dir_path):
+    def save_to_netcdf(self, new_dir_path):
         kind = "N"
-        output_file = f"{new_dir_path}/{kind}_{sim.now}_t{sim.time}_num{sim.num}_K{sim.K}_{sim.alpha}deg_{sim.gamma}.nc"
+        output_file = f"{new_dir_path}/{kind}_{self.now}_t{self.time}.nc"
         print(output_file)
-        sim.ds.to_netcdf(output_file)
+        self.ds.to_netcdf(output_file)
         
     
 class Simulation(WaveResolutions):
@@ -124,9 +124,14 @@ class Simulation(WaveResolutions):
                 self.u_bar = self.w[:self.num +1 ]
                 self.theta_bar = self.w[self.num + 1:]
                 ds = NumericalDatasetToNetcdf.make_dataset(self)
-                print(ds)
                 data = NumericalDatasetToNetcdf(ds)
                 if m==0:
                     new_dir_path = data.make_new_dir_path(output_path)
                     data.make_new_dir(new_dir_path)
+<<<<<<< Updated upstream
                 data.save_to_netcdf(new_dir_path) #self.new_dir_path
+=======
+                data.save_to_netcdf(new_dir_path)
+                
+                
+>>>>>>> Stashed changes
