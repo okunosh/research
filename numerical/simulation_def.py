@@ -59,10 +59,12 @@ class NumericalDatasetToNetcdf(DatasetToNetcdf):
         
     
 class Simulation(WaveResolutions):
+
     def __init__(self, g, alpha_deg, Theta, theta_0, gamma, omega, K, num, dt):
         super().__init__(g, alpha_deg, Theta, theta_0, gamma, omega, K, None, num)
         self.dt = dt
         self.dn = 2* np.pi * self.l_plus / self.num
+
 
         self.mat_num = self.num+1
         self.A = self.K * self.dt / self.dn**2
@@ -74,6 +76,7 @@ class Simulation(WaveResolutions):
         self.hour = 24
         self.t_fin = 3600 * self.hour
         self.times = np.arange(0, self.t_fin+1, self.dt)   
+
         
     def make_w_init(self):
         return np.zeros((self.mat_num)*2).reshape((self.mat_num)*2,1)
@@ -94,7 +97,9 @@ class Simulation(WaveResolutions):
         return a
 
     def make_2_2(self):
+
         a = self.make_1_1()
+
         a[1,0] = self.A
         return a
 
@@ -109,8 +114,6 @@ class Simulation(WaveResolutions):
             [c,d]
             ])
         return block_matrix
-
-    
     def run_simulation(self, output_path):
         for m, t in enumerate(self.times):
             self.w = self.matrix @ self.w
@@ -126,6 +129,4 @@ class Simulation(WaveResolutions):
                 if m==0:
                     new_dir_path = data.make_new_dir_path(output_path)
                     data.make_new_dir(new_dir_path)
-                data.save_to_netcdf(new_dir_path) #self.new_dir_path?
-                
-                
+                data.save_to_netcdf(new_dir_path) #self.new_dir_path
