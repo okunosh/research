@@ -15,7 +15,7 @@ class WaveResolutions:
 
         self.deg2rad = np.pi / 180
         self.alpha = alpha_deg * self.deg2rad
-        self.g = 3.72#9.81
+        self.g = 9.81#3.72#9.81
 
         self.N = np.sqrt(gamma * self.g / theta_0)
         self.N_alpha = self.N * np.sin(self.alpha)
@@ -33,7 +33,7 @@ class WaveResolutions:
         psi = self.psi
         
         if abs(self.omega - self.N_alpha) < 1.e-6:#self.N_alpha == self.omega: #Critical
-            self.n = np.linspace(0,2.*np.pi*self.l_plus, 1000)
+            self.n = np.linspace(0,2.*np.pi*self.l_plus, 701)
             self.omega_plus, self.omega_minus = 2*self.N_alpha, 0
             self.l_plus, self.l_minus = np.sqrt(self.K/self.N_alpha), 0
             self.eta = self.n / 2 / np.sqrt(self.K*self.omega_t/self.omega)
@@ -49,9 +49,9 @@ class WaveResolutions:
             print('SubCritical')
 
             return self.n, self.const_u * ( (np.exp(-self.n / self.l_plus) * np.cos(self.omega_t - self.n / self.l_plus + psi))-
-                              (np.exp(-self.n / self.l_minus) * np.cos(self.omega_t - self.n / self.l_minus + psi)) ),self.const_theta * ( (np.exp(-self.n / self.l_plus) * np.sin(self.omega_t - self.n / self.l_plus + psi)) + (np.exp(-self.n / self.l_minus) * np.sin(self.omega_t - self.n / self.l_minus + psi)) )
+                              (np.exp(-self.n / self.l_minus) * np.cos(self.omega_t - self.n / self.l_minus + psi)) ), self.const_theta * ( (np.exp(-self.n / self.l_plus) * np.sin(self.omega_t - self.n / self.l_plus + psi)) + (np.exp(-self.n / self.l_minus) * np.sin(self.omega_t - self.n / self.l_minus + psi)) )
 
         else: #SuperCritical
             self.n = np.linspace(0,2.*np.pi*self.l_plus, 1000)
             print('SuperCritical')
-            return  self.n, (self.const_u * ( (np.exp(-self.n / self.l_plus) * np.cos(self.omega_t - self.n / self.l_plus + psi))- (np.exp(-self.n / self.l_minus) * np.cos(self.omega_t + self.n / self.l_minus + psi) ))),self.const_theta * ( (np.exp(-self.n / self.l_plus) * np.sin(self.omega_t - self.n / self.l_plus + psi))+(np.exp(-self.n / self.l_minus) * np.sin(self.omega_t + self.n / self.l_minus + psi)) )
+            return  self.n, (self.const_u * ( (np.exp(-self.n / self.l_plus) * np.cos(self.omega_t - self.n / self.l_plus + psi))- (np.exp(-self.n / self.l_minus) * np.cos(self.omega_t + self.n / self.l_minus + psi) ))), self.const_theta * ( (np.exp(-self.n / self.l_plus) * np.sin(self.omega_t - self.n / self.l_plus + psi))+(np.exp(-self.n / self.l_minus) * np.sin(self.omega_t + self.n / self.l_minus + psi)) )
