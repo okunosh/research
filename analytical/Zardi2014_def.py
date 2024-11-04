@@ -32,52 +32,60 @@ class WaveResolutions:
 
         self.const_u = self.Theta * self.N / (2 * self.gamma)
         self.const_theta = self.Theta / 2
+        self.n = np.linspace(0,2.*np.pi*self.l_plus, self.num+1) #???con
 
         output = self.resolutions()
 
     def resolutions(self):
         psi = self.psi
-        
-        if abs(self.omega - self.N_alpha) < 1.e-6:#self.N_alpha == self.omega: #Critical
-            self.n = np.linspace(0,2.*np.pi*self.l_plus, self.num)
-            self.omega_plus, self.omega_minus = 2*self.N_alpha, 0
-            self.l_plus, self.l_minus = np.sqrt(self.K/self.N_alpha), 0
-            self.eta = self.n / 2 / np.sqrt(self.K*self.omega_t/self.omega)
+        regime = "N"
+        if self.omega_t is None:
+            output = {"planet":self.planet,
+                      "regime":regime,
+                      "altitude":self.n
+                      }
+            return output
+        else:
+            if abs(self.omega - self.N_alpha) < 1.e-6:#self.N_alpha == self.omega: #Critical
+                #self.n = np.linspace(0,2.*np.pi*self.l_plus, self.num)
+                self.omega_plus, self.omega_minus = 2*self.N_alpha, 0
+                self.l_plus, self.l_minus = np.sqrt(self.K/self.N_alpha), 0
+                self.eta = self.n / 2 / np.sqrt(self.K*self.omega_t/self.omega)
+                
+                print('Critical')
+                regime = 'Critical'
+                alt = self.n
+                u_bar = self.const_u * ( (np.exp(-self.n / self.l_plus) * np.cos(self.omega_t - self.n / self.l_plus + psi)) - erfc(self.eta)*np.cos(self.omega_t + psi) )
+                theta_bar = self.const_theta * ( (np.exp(-self.n / self.l_plus) * np.sin(self.omega_t - self.n / self.l_plus + psi)) + erfc(self.eta)*np.sin(self.omega_t + psi) )
             
-            print('Critical')
-            regime = 'Critical'
-            alt = self.n
-            u_bar = self.const_u * ( (np.exp(-self.n / self.l_plus) * np.cos(self.omega_t - self.n / self.l_plus + psi)) - erfc(self.eta)*np.cos(self.omega_t + psi) )
-            theta_bar = self.const_theta * ( (np.exp(-self.n / self.l_plus) * np.sin(self.omega_t - self.n / self.l_plus + psi)) + erfc(self.eta)*np.sin(self.omega_t + psi) )
-        
-        elif self.N_alpha < self.omega: #SubCritical
-            self.omega_minus = abs(self.omega_minus)
-            self.l_minus = np.sqrt(2 * self.K / self.omega_minus)
-            self.n = np.linspace(0, 2.*np.pi*self.l_plus, self.num)
-            print('SubCritical')
-
-            regime = 'SubCritical'
-            alt = self.n
-            u_bar = self.const_u * ( (np.exp(-self.n / self.l_plus) * np.cos(self.omega_t - self.n / self.l_plus + psi))-
+            elif self.N_alpha < self.omega: #SubCritical
+                self.omega_minus = abs(self.omega_minus)
+                self.l_minus = np.sqrt(2 * self.K / self.omega_minus)
+                #self.n = np.linspace(0, 2.*np.pi*self.l_plus, self.num)
+                print('SubCritical')
+                
+                regime = 'SubCritical'
+                alt = self.n
+                u_bar = self.const_u * ( (np.exp(-self.n / self.l_plus) * np.cos(self.omega_t - self.n / self.l_plus + psi))-
                               (np.exp(-self.n / self.l_minus) * np.cos(self.omega_t - self.n / self.l_minus + psi)) )
-            theta_bar = self.const_theta * ( (np.exp(-self.n / self.l_plus) * np.sin(self.omega_t - self.n / self.l_plus + psi)) + (np.exp(-self.n / self.l_minus) * np.sin(self.omega_t - self.n / self.l_minus + psi)) )
+                theta_bar = self.const_theta * ( (np.exp(-self.n / self.l_plus) * np.sin(self.omega_t - self.n / self.l_plus + psi)) + (np.exp(-self.n / self.l_minus) * np.sin(self.omega_t - self.n / self.l_minus + psi)) )
             
-        else: #SuperCritical
-            self.n = np.linspace(0,2.*np.pi*self.l_plus, self.num)
-            print('SuperCritical')
+            else: #SuperCritical
+                #self.n = np.linspace(0,2.*np.pi*self.l_plus, self.num)
+                print('SuperCritical')
 
-            regime = 'SuperCritical'
-            alt = self.n
-            u_bar = (self.const_u * ( (np.exp(-self.n / self.l_plus) * np.cos(self.omega_t - self.n / self.l_plus + psi))- (np.exp(-self.n / self.l_minus) * np.cos(self.omega_t + self.n / self.l_minus + psi) )))
-            theta_bar = self.const_theta * ( (np.exp(-self.n / self.l_plus) * np.sin(self.omega_t - self.n / self.l_plus + psi))+(np.exp(-self.n / self.l_minus) * np.sin(self.omega_t + self.n / self.l_minus + psi)) )
+                regime = 'SuperCritical'
+                alt = self.n
+                u_bar = (self.const_u * ( (np.exp(-self.n / self.l_plus) * np.cos(self.omega_t - self.n / self.l_plus + psi))- (np.exp(-self.n / self.l_minus) * np.cos(self.omega_t + self.n / self.l_minus + psi) )))
+                theta_bar = self.const_theta * ( (np.exp(-self.n / self.l_plus) * np.sin(self.omega_t - self.n / self.l_plus + psi))+(np.exp(-self.n / self.l_minus) * np.sin(self.omega_t + self.n / self.l_minus + psi)) )
 
-        t = self.omega_t / self.omega
-        output= {"planet":self.planet,
-                 "regime":regime,
-                 "altitude":alt,
-                 "t": t,
-                 "u_bar":u_bar.reshape(self.num,1),
-                 "theta_bar":theta_bar.reshape(self.num,1)
-               }
+                t = self.omega_t / self.omega
+                output= {"planet":self.planet,
+                         "regime":regime,
+                         "altitude":alt,
+                         "t": t,
+                         "u_bar":u_bar.reshape(self.num+1,1),
+                         "theta_bar":theta_bar.reshape(self.num+1,1)
+                         }
         return output
              
