@@ -89,6 +89,7 @@ if __name__ == "__main__":
             data = AnalyticalDatasetToNetcdf(ds)
             if j==0:
                 new_dir_path = data.make_new_dir_path(output_path)
+                print(new_dir_path)
                 data.make_new_dir(new_dir_path)
             print(ds)
             #input("stop")
