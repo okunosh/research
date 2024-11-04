@@ -18,42 +18,7 @@ class DatasetToNetcdf:
         self.flow_regime = ds.flow_regime
         self.planet = ds.planet
 
-    @staticmethod
-    def make_Dataset(wave): #unnecess
-        ds = xr.Dataset(
-            data_vars=dict(
-            u_bar=(["altitude", "time"], wave.resolutions()["u_bar"], {"unit":"m/s", "description":"along slope velocity"}),
-            theta_bar = (["altitude", "time"], wave.resolutions()["theta_bar"], {"unit": "kelvin", "description":"mean potential temperature anomaly"}),
-            K = (["time"], np.array([wave.K]), {"unit": "m^2 s^-1", "description":"diffusion coefficient"}),
-            alpha = (["time"], np.array([wave.alpha_deg]), {"unit": "degree", "description":"slope angle"}),
-            theta_0 = (["time"], np.array([wave.theta_0]), {"description":""}),
-            Theta = (["time"], np.array([wave.Theta]), {"description":""}),
-            gamma = (["time"], np.array([wave.gamma]), {"description":"vertical gradient of potential temperature"}), 
-            N = (["time"], np.array([wave.N]), {"description": "Bulant-Visala"}),
-            N_alpha = (["time"], np.array([wave.N_alpha]),{"description":"Bulant-Visala along slope"}),
-            omega = (["time"], np.array([wave.omega]), {"description":"angular frequency"}),
-            omega_plus = (["time"], np.array([wave.omega_plus]), {"description":""}),
-            omega_minus = (["time"], np.array([wave.omega_minus]), {"description":""}),
-            l_plus = (["time"], np.array([wave.l_plus]), {"description":""}),
-            l_minus = (["time"], np.array([wave.l_minus]), {"description":""}),
-        ),
-        coords = dict(
-            altitude = ("altitude", wave.resolutions()["altitude"], {"unit":"meters"}),
-            time = ("time", np.array([wave.resolutions()["t"]]), {"unit":"seconds"})
-        ),
-        attrs = dict(
-            #title="analytical solution",
-            institution="KSU/sci",
-            planet=wave.planet,
-            #flow_regime=wave.resolutions()["regime"],
-            history=f"Created on {datetime.now().isoformat()}",
-            reference="Zardi et al. (2014), DOI:10.1002/qj.2485"
-        ),
-    )
-        return ds
-
-
-    def make_dataset(data): #nesec
+    def make_dataset(data):
         data_vars = {
             "u_bar": (["altitude", "time"], data["u_bar"], {"unit": "m/s", "description": "along slope velocity"}),
             "theta_bar": (["altitude", "time"], data["theta_bar"], {"unit": "kelvin", "description": "mean potential temperature anomaly"}),
@@ -94,7 +59,8 @@ class DatasetToNetcdf:
     def format_gamma(self, gamma_value):
         gamma = f"{gamma_value:.2e}"
         gamma_base, gamma_exp = gamma.split("e")
-        return gamma_base.replace(',', '-')
+        gamma_show = gamma_base.replace('.', '-')
+        return gamma_show
 
     def padded_time(self, time_value):
         return f"{int(time_value):05}"
@@ -108,7 +74,7 @@ class DatasetToNetcdf:
         
     def save_to_netcdf(self, new_dir_path): #
         kind = "A" #analytical change to E when numerical
-        output_file = f"{new_dir_path}/{kind}_{self.now}_t{self.time}_{self.flow_regime}_num{self.num}_K{self.K}_{self.alpha}deg_{self.gamma}.nc"
+        output_file = f"{new_dir_path}/{kind}_{self.now}_{self.flow_regime}_t{self.time}.nc"
         self.ds.to_netcdf(output_file)
             
                     
