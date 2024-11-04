@@ -7,7 +7,7 @@ reload(Zardi2014_def)
 from Zardi2014_def import WaveResolutions
 
 # parameters list
-alpha_deg_values = [0.41]#[0.46]
+alpha_deg_values = [30.]#[0.46]
 Theta_values = [5]
 theta_0_values = [288]#[213]
 gamma_values = [3.e-3]#[5.5e-3]

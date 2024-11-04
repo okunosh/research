@@ -7,15 +7,16 @@ reload(Zardi2014_def)
 from Zardi2014_def import WaveResolutions
 
 # parameters list
-alpha_deg_values = [0.3]
-Theta_values = [10]
-theta_0_values = [230]
-gamma_values = [1.15e-2]
-omega_values = [7.08e-5]
-K_values = [20]
-#omega_t_values = [0, 0.25*np.pi, 0.5*np.pi, 0.75*np.pi, np.pi, 1.25*np.pi, 1.5*np.pi, 1.75*np.pi, 2*np.pi]
-omega_t_values = [0, 0.125*np.pi, 0.25*np.pi, 0.475*np.pi, 0.5*np.pi, 0.625*np.pi, 0.75*np.pi, 0.875*np.pi, np.pi]
-psi_values = [0]
+alpha_deg_values = [0.41]#[0.46]
+Theta_values = [5]
+theta_0_values = [213]
+gamma_values = [5.5e-3]
+omega_values = [7.08e-5] #2*pi * 1/88775
+K_values = [0.25]
+omega_t_values = [0, 0.25*np.pi, 0.5*np.pi, 0.75*np.pi, np.pi, 1.25*np.pi, 1.5*np.pi, 1.75*np.pi, 2*np.pi]
+
+#omega_t_values = [0, 0.125*np.pi, 0.25*np.pi, 0.475*np.pi, 0.5*np.pi, 0.625*np.pi, 0.75*np.pi, 0.875*np.pi, np.pi]
+psi_values = [0]#[np.pi*0.25]
 
 # 全組み合わせを生成
 param_combinations = itertools.product(
@@ -62,7 +63,7 @@ for combination in param_combinations:
 
 t_vals = np.arange(0, 2.1, 0.25) * np.pi / wave.omega
 
-t_vals = np.arange(0, 1.1, 0.125) * np.pi / wave.omega
+#t_vals = np.arange(0, 1.1, 0.125) * np.pi / wave.omega
 t_labels = [f"{val:.3g}" for val in t_vals]
 
 
@@ -96,7 +97,7 @@ ax[0].set_title('u [m/s]')
 ax[0].set_xticks([0, result['const_u']])
 
 ax[1].set_title(r'$\theta$ [K]')
-ax[1].set_xticks([0, result['const_theta']])
+ax[1].set_xticks([0, params['Theta']])
 
 for k in range(2):
     #ax[k].set_yticks(yticks, yticks_label)
