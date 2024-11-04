@@ -11,15 +11,15 @@ class DatasetToNetcdf:
         self.K = self.format_value(ds.K.values[0])
         self.alpha = self.format_value(ds.alpha.values[0])
         self.gamma = self.format_gamma(ds.gamma.values[0])
-        self.flow_regime = ds.flow_regime
-        self.planet = ds.planet
         self.time = self.padded_time(ds.time.values[0])
         self.theta_0 = self.format_value(ds.theta_0.values[0])
         self.Theta = self.format_value(ds.Theta.values[0])
         self.t = ds.time.values[0]
+        self.flow_regime = ds.flow_regime
+        self.planet = ds.planet
 
     @staticmethod
-    def make_Dataset(wave):
+    def make_Dataset(wave): #unnecess
         ds = xr.Dataset(
             data_vars=dict(
             u_bar=(["altitude", "time"], wave.resolutions()["u_bar"], {"unit":"m/s", "description":"along slope velocity"}),
@@ -50,6 +50,39 @@ class DatasetToNetcdf:
             reference="Zardi et al. (2014), DOI:10.1002/qj.2485"
         ),
     )
+        return ds
+
+
+    def make_dataset(data): #nesec
+        data_vars = {
+            "u_bar": (["altitude", "time"], data["u_bar"], {"unit": "m/s", "description": "along slope velocity"}),
+            "theta_bar": (["altitude", "time"], data["theta_bar"], {"unit": "kelvin", "description": "mean potential temperature anomaly"}),
+            "K": (["time"], np.array([data["K"]]), {"unit": "m^2 s^-1", "description": "diffusion coefficient"}),
+            "alpha": (["time"], np.array([data["alpha"]]), {"unit": "degree", "description": "slope angle"}),
+            "theta_0": (["time"], np.array([data["theta_0"]]), {"description": ""}),
+            "Theta": (["time"], np.array([data["Theta"]]), {"description": ""}),
+            "gamma": (["time"], np.array([data["gamma"]]), {"description": "vertical gradient of potential temperature"}),
+            "N": (["time"], np.array([data["N"]]), {"description": "Bulant-Visala"}),
+            "N_alpha": (["time"], np.array([data["N_alpha"]]), {"description": "Bulant-Visala along slope"}),
+            "omega": (["time"], np.array([data["omega"]]), {"description": "angular frequency"}),
+            "omega_plus": (["time"], np.array([data["omega_plus"]]), {"description": ""}),
+            "omega_minus": (["time"], np.array([data["omega_minus"]]), {"description": ""}),
+            "l_plus": (["time"], np.array([data["l_plus"]]), {"description": ""}),
+            "l_minus": (["time"], np.array([data["l_minus"]]), {"description": ""}),
+        }
+        coords = {
+            "altitude": ("altitude", data["altitude"], {"unit": "meters"}),
+            "time": ("time", data["time"], {"unit": "seconds"})
+        }
+
+        attrs = {
+            "institution": "KSU/sci",
+            "planet": data["planet"],
+            "history": f"Created on {datetime.now().isoformat()}",
+            "reference": "Zardi et al. (2014), DOI:10.1002/qj.2485"
+        }
+
+        ds = xr.Dataset(data_vars=data_vars, coords=coords, attrs=attrs)
         return ds
 
     def get_num(self):
