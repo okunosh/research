@@ -11,17 +11,18 @@ def show_params(params):
     
 if __name__ == "__main__":
     # Parameters
-    num = 700
-    alpha_deg = 30
+    num = 260
+    alpha_deg = 0.46
     Theta = 5.
-    K = 3.
+    K = 100.
 
-    dt = 1.e-3
+    dt = 1.e-1
     #path
     output_path ="output/results"
 
     
     #Earth
+    """
     params = {
         "num": num,
         "alpha_deg": alpha_deg,
@@ -42,16 +43,23 @@ if __name__ == "__main__":
         "Theta": Theta,
         "K": K,
         "g": 3.72,
-        "omega": 7.08e-5,  # 2*pi /8875
+        "omega": 7.08e-5,  # 2*pi /88750
         "theta_0": 210.,
         "gamma": 4.5e-3,
         "dt": dt,
         "output_path": output_path
     }
-    """
     
     #show_params(params)
     #calculate
-    sim = Simulation(params["g"], params["alpha_deg"], params["Theta"], params["theta_0"], params["gamma"], params["omega"], params["K"], params["num"], params["dt"])
+    sim = Simulation(params["g"],
+                     params["alpha_deg"],
+                     params["Theta"],
+                     params["theta_0"],
+                     params["gamma"],
+                     params["omega"],
+                     params["K"],
+                     params["num"],
+                     params["dt"])
 
-    sim.run_simulation(params["output_path"])
+    sim.run_simulation(params["output_path"], params['dt'])
