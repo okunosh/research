@@ -54,8 +54,8 @@ def calculation(g,  alpha_deg, Theta, theta_0, gamma, omega, K, omega_t_value, n
 
 if __name__ == "__main__":
         #Parameters
-        num = 700
-        alpha_deg = 30
+        num = 260
+        alpha_deg = 0.41
         Theta = 5.
         K = 3.
         
