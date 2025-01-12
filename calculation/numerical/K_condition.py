@@ -41,7 +41,7 @@ def makeDataset(space_res, time_res, tarr, narr, Karr):
     attrs = {
         "history":f"Created on {datetime.now().isoformat()}"
         """
-        "reference": "Martinez et al. (20117), DOI: 10.1007/s11214-017-0360-x"
+        "reference":"
         """
     }
 
