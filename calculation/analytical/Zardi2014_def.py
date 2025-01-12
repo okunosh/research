@@ -38,13 +38,22 @@ class WaveResolutions:
 
     def resolutions(self):
         psi = self.psi
-        regime = "N"
+        branch = abs(self.omega - self.N_alpha)
+        
         if self.omega_t is None: #numerical
+            if branch < 1.e-6:
+                regime = "Critical"
+            elif self.N_alpha < self.omega: #SubCritical
+                regime = "SubCritical"
+            else:#SuperCritical
+                regime = "SuperCritical"
+                
             output = {"planet":self.planet,
                       "regime":regime,
                       "altitude":self.n
                       }
             return output
+        
         else:
             t = self.omega_t / self.omega
             if abs(self.omega - self.N_alpha) < 1.e-6:#self.N_alpha == self.omega: #Critical
