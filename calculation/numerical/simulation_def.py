@@ -13,6 +13,7 @@ sys.path.insert(0, target_dir)
 #print(sys.path)
 from Zardi2014_def import WaveResolutions
 from ql_plot import process_netcdf_directory
+from boundary_condition_theta import surface_theta_0
 #-----------------------------------------------
 
 class NumericalDatasetToNetcdf(DatasetToNetcdf):
@@ -21,7 +22,7 @@ class NumericalDatasetToNetcdf(DatasetToNetcdf):
         sim_data = {
             "u_bar": sim.u_bar,
             "theta_bar": sim.theta_bar,
-            "K": sim.K,
+            "K": sim.K,  #need to be changed!!
             "alpha": sim.alpha_deg,
             "theta_0": sim.theta_0,
             "Theta": sim.Theta,
@@ -36,7 +37,7 @@ class NumericalDatasetToNetcdf(DatasetToNetcdf):
             "altitude": sim.n,
             "time": np.array([sim.time]),
             "planet": sim.planet,
-            "flow_regime": sim.resolutions()["regime"] ###
+            "flow_regime": sim.resolutions()["regime"]
         }
         ds = DatasetToNetcdf.make_dataset(sim_data)
         ds = ds.assign_attrs(title="Numerical solution", flow_regime=sim_data["flow_regime"])
@@ -47,14 +48,14 @@ class NumericalDatasetToNetcdf(DatasetToNetcdf):
         ds.attrs = ordered_attrs
         return ds
 
-    def make_new_dir_path(self, output_path):
-        new_dir_path = f"{output_path}/{self.planet}/{self.now}_num{self.num}_alp{self.alpha}_gamma{self.gamma}"
+    def make_new_dir_path(self, output_path, dt):
+        new_dir_path = f"{output_path}/{self.planet}/{self.now}_{self.flow_regime}_num{self.num}_alp{self.alpha}_gamma{self.gamma}_dt{dt}"
         return new_dir_path
 
     
     def save_to_netcdf(self, new_dir_path):
         kind = "N"
-        output_file = f"{new_dir_path}/{kind}_{self.now}_t{self.time}.nc"
+        output_file = f"{new_dir_path}/{kind}_{self.now}_{self.flow_regime}_t{self.time}.nc"
         #print(output_file)
         self.ds.to_netcdf(output_file)
         
@@ -68,12 +69,13 @@ class Simulation(WaveResolutions):
 
 
         self.mat_num = self.num+1
+        #self.A need to be changed!!
         self.A = self.K * self.dt / self.dn**2
         self.B = self.dt * self.N**2 * np.sin(self.alpha) / self.gamma
         self.C = -self.dt * self.gamma * np.sin(self.alpha)
 
         self.w= self.make_w_init()
-        self.matrix = self.make_block_matrix()
+        self.matrix = self.make_block_matrix() #change!
         #time--------------
         self.day = 4
         self.day2sec = 24 * 3600
@@ -101,9 +103,7 @@ class Simulation(WaveResolutions):
         return a
 
     def make_2_2(self):
-
         a = self.make_1_1()
-
         a[1,0] = self.A
         return a
 
@@ -118,10 +118,17 @@ class Simulation(WaveResolutions):
             [c,d]
             ])
         return block_matrix
-    def run_simulation(self, output_path):
+    
+    def run_simulation(self, output_path, dt):
+        surf_con = xr.open_dataset("TestGroundTheta0.nc")
+        surface_theta = surf_con.theta_0.values
+        
         for m, t in enumerate(self.times):
+            num = m%(24*3600*10)
             self.w = self.matrix @ self.w
-            self.w[self.num+1] = self.Theta*np.sin(self.omega * t)
+            #self.w[self.num+1] = self.Theta*np.sin(self.omega * t)
+            #self.w[self.num+1] = surface_theta_0(self.Theta, self.omega, t)
+            self.w[self.num+1] = surface_theta[num]
                 
             if t%3600 == 0:
                 self.time = t
@@ -130,7 +137,7 @@ class Simulation(WaveResolutions):
                 ds = NumericalDatasetToNetcdf.make_dataset(self)
                 data = NumericalDatasetToNetcdf(ds)
                 if m==0:
-                    new_dir_path = data.make_new_dir_path(output_path)
+                    new_dir_path = data.make_new_dir_path(output_path, dt)
                     data.make_new_dir(new_dir_path)
                 data.save_to_netcdf(new_dir_path)
         process_netcdf_directory(new_dir_path)
