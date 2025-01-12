@@ -70,7 +70,7 @@ if __name__ == '__main__':
     DAY_SEC= 24*3600
     time_res = 0.1
     space_res = 260
-    path = "K/Day30_Night3.nc"
+    path = "K/___.nc"
 
     n_arr = np.arange(0, space_res)    
     t_arr = np.arange(0, DAY_SEC, time_res)
