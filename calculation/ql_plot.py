@@ -71,7 +71,7 @@ class NetCDFProcessor:
         #save_file_name2 = f"{}/{base_name}.png"
         plt.savefig(save_file_name, dpi=300)
 
-    def plot_u_theta(self): #heat map---------------------------------------------------------
+    def plot_u_theta(self, confirm=False): #heat map---------------------------------------
         """plot u_bar & theta_bar"""
         filtered_files = self.filter_files_by_time()
         files_num = len(filtered_files) #times
@@ -135,21 +135,22 @@ class NetCDFProcessor:
         ax[1].set_xticks(days)
         ax[1].set_ylabel('altitude [m]')
         ax[1].set_title(r"$\overline{\theta}$")
-    
-        # プロットの表示
-        #plt.show()
 
-        base_name = os.path.basename(self.directory.rstrip('/'))
-        save_file_name = f"{self.directory}/{base_name}.png"
+        if confirm==True:
+            print("If you want to save the fig, you need -> confirm==False")
+            plt.show()
+        else:
+            base_name = os.path.basename(self.directory.rstrip('/'))
+            save_file_name = f"{self.directory}/{base_name}.png"
+            
+            #save_dir2 = ""
+            #save_file_name2 = f"{}/{base_name}.png"
+            plt.savefig(save_file_name, dpi=300)
 
-        #save_dir2 = ""
-        #save_file_name2 = f"{}/{base_name}.png"
-        plt.savefig(save_file_name, dpi=300)
-
-def process_netcdf_directory(directory):
+def process_netcdf_directory(directory, confirm=False):
     processor = NetCDFProcessor(directory)
     #processor.plot_variables()
-    processor.plot_u_theta()
+    processor.plot_u_theta(confirm)
     
 if __name__ == '__main__':
     import argparse
@@ -157,4 +158,4 @@ if __name__ == '__main__':
     parser.add_argument('directory', type=str, help='Directory containing NetCDF files')
     
     args = parser.parse_args()
-    process_netcdf_directory(args.directory)
+    process_netcdf_directory(args.directory, confirm=True)

@@ -14,7 +14,7 @@ if __name__ == "__main__":
     num = 260
     alpha_deg = 0.46
     Theta = 5.
-    K = 100.
+    K = 30. #to decide l_+ (height)
 
     dt = 1.e-1
     #path
