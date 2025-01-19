@@ -62,15 +62,11 @@ class NumericalDatasetToNetcdf(DatasetToNetcdf):
     
 class Simulation(WaveResolutions):
 
-    def __init__(self, g, alpha_deg, Theta, theta_0, gamma, omega, K, num, dt):
+    def __init__(self, g, alpha_deg, Theta, theta_0, gamma, omega, K, num, dt, K_file):
         super().__init__(g, alpha_deg, Theta, theta_0, gamma, omega, K, None, num)
         self.dt = dt
         self.dn = 2* np.pi * self.l_plus / self.num
-
-
         self.mat_num = self.num+1
-        #self.A need to be changed!!
-        #self.A = self.K * self.dt / self.dn**2
         self.B = self.dt * self.N**2 * np.sin(self.alpha) / self.gamma
         self.C = -self.dt * self.gamma * np.sin(self.alpha)
 
@@ -82,13 +78,14 @@ class Simulation(WaveResolutions):
         self.t_fin = self.day * self.day2sec 
         self.times = np.arange(0, self.t_fin+1, self.dt)
         #-----------------
+        self.K_file = K_file
 
         
     def make_w_init(self):
         return np.zeros((self.mat_num)*2).reshape((self.mat_num)*2,1)
 
     #block matrix
-    def updateK(self, K): #K: column vector whose length is equal to self.mat_num
+    def updateK(self, K): #K: raw vector whose length is equal to self.mat_num
         coef = self.dt / self.dn**2
         E = np.ones_like(K)
         A = coef * K
@@ -133,21 +130,23 @@ class Simulation(WaveResolutions):
         print("d:", d)
         print(A, AA)
         """
+        #print("block matrix:", np.shape(block_matrix))
         return block_matrix
     
     def run_simulation(self, output_path, dt):
+        from datetime import datetime
         surf_con = xr.open_dataset("TestGroundTheta0.nc")
         surface_theta = surf_con.theta_0.values
-        K_ds = xr.open_dataset("K/constant_100.nc")
-        K_vec = K_ds.K.values.reshape(K_ds.K.values.shape[1], K_ds.K.values.shape[0])
+        print(datetime.now().time())
+        K_ds = xr.open_dataset(self.K_file)
+        K_vec = K_ds.K.values#.reshape(K_ds.K.values.shape[1], K_ds.K.values.shape[0])
         
         for m, t in enumerate(self.times):
             num = m%(24*3600*10)
-            K_ = K_vec[num]
+            K_ = K_vec[:,num]
             #print(K_, K_.shape)
-            #print(self.dn, self.l_plus, self.N_alpha)
-            matrix = self.update_block_matrix(K_)
             #input("stop")
+            matrix = self.update_block_matrix(K_)
             self.w = matrix @ self.w
             #self.w[self.num+1] = self.Theta*np.sin(self.omega * t)
             #self.w[self.num+1] = surface_theta_0(self.Theta, self.omega, t)
@@ -163,4 +162,6 @@ class Simulation(WaveResolutions):
                     new_dir_path = data.make_new_dir_path(output_path, dt)
                     data.make_new_dir(new_dir_path)
                 data.save_to_netcdf(new_dir_path)
+                print("finished"+str(t), datetime.now().time())
         process_netcdf_directory(new_dir_path)
+        print(datetime.now().time())
