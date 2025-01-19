@@ -16,6 +16,7 @@ def K_condition2(t_arr, space_res):
     dusk = 18*36000
     arr = np.ones_like(t_arr)*3
     arr[dawn:dusk] = 100
+
     K_arr = np.tile(arr, (space_res, 1))
     return K_arr
 
@@ -81,6 +82,7 @@ if __name__ == '__main__':
     K = K_arr.reshape(space_res, len_tarr)
     
     ds = makeDataset(space_res, time_res, t_arr, n_arr, K)
-    saveToNetcdf(ds, path, confirm=True)
+
+    saveToNetcdf(ds, path, confirm=False)
 
     
