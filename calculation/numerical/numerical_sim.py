@@ -12,9 +12,10 @@ def show_params(params):
 if __name__ == "__main__":
     # Parameters
     num = 260
-    alpha_deg = 0.46
+    alpha_deg = 0.3
     Theta = 5.
-    K = 30. #to decide l_+ (height)
+    K = 100. #to decide l_+ (height)
+    K_file = "K/Day100_night3.nc"
 
     dt = 1.e-1
     #path
@@ -42,6 +43,7 @@ if __name__ == "__main__":
         "alpha_deg": alpha_deg,
         "Theta": Theta,
         "K": K,
+        "K_file":K_file,
         "g": 3.72,
         "omega": 7.08e-5,  # 2*pi /88750
         "theta_0": 210.,
@@ -60,6 +62,7 @@ if __name__ == "__main__":
                      params["omega"],
                      params["K"],
                      params["num"],
-                     params["dt"])
+                     params["dt"],
+                     params["K_file"])
 
     sim.run_simulation(params["output_path"], params['dt'])
