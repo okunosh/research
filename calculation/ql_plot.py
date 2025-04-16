@@ -83,7 +83,12 @@ class NetCDFProcessor:
         l_plus = ds0.l_plus.values[0]
         altitude = ds0.altitude.values
         upper_alt = 2 * np.pi * l_plus
-        
+
+        K_file = ds0.K_file.values
+        dsK = xr.open_dataset(K_file)
+        K = dsK.K.values
+        print("K:", K.shape)
+        input("stop")
         #u_bars, theta_bars = np.zeros((files_num, spatial_length,1))*np.nan, np.zeros((files_num, spatial_length,1))*np.nan
         u_bars, theta_bars = np.zeros((spatial_length,1, files_num))*np.nan, np.zeros((spatial_length,1, files_num))*np.nan
         print(u_bars.shape)
@@ -102,8 +107,6 @@ class NetCDFProcessor:
             u_bars[:,:,i] = u_bar
             theta_bars[:,:,i] = theta_bar
             
-            #const_u = ds.Theta.values[0] * ds.N.values[0] / ds.gamma.values[0] / 2
-            #const_theta = ds.Theta.values[0]
 
         u_bars = u_bars.reshape((spatial_length, files_num))
         theta_bars = theta_bars.reshape((spatial_length, files_num))
@@ -147,10 +150,66 @@ class NetCDFProcessor:
             #save_file_name2 = f"{}/{base_name}.png"
             plt.savefig(save_file_name, dpi=300)
 
+"""
+    #no use?
+    def scatter_plot_u_theta(self):
+        filtered_files = self.filter_files_by_time()
+        files_num = len(filtered_files) #times
+        
+        first_file_path = os.path.join(self.directory, filtered_files[0])
+        ds0 = xr.open_dataset(first_file_path)
+
+        spatial_length = ds0.altitude.values.shape[0]
+        l_plus = ds0.l_plus.values[0]
+        altitude = ds0.altitude.values
+        upper_alt = 2 * np.pi * l_plus
+        
+        #u_bars, theta_bars = np.zeros((files_num, spatial_length,1))*np.nan, np.zeros((files_num, spatial_length,1))*np.nan
+        u_bars, theta_bars = np.zeros((spatial_length,1, files_num))*np.nan, np.zeros((spatial_length,1, files_num))*np.nan
+        print(u_bars.shape)
+        t = np.arange(0, files_num)
+        
+        for i, file in enumerate(filtered_files):
+            file_path = os.path.join(self.directory, file)
+            ds = xr.open_dataset(file_path)
+            
+            u_bar = ds.u_bar.values
+            theta_bar = ds.theta_bar.values
+
+            #u_bars[i,:,:] = u_bar
+            #theta_bars[i,:,:] = theta_bar
+
+            u_bars[:,:,i] = u_bar
+            theta_bars[:,:,i] = theta_bar
+            
+            #const_u = ds.Theta.values[0] * ds.N.values[0] / ds.gamma.values[0] / 2
+            #const_theta = ds.Theta.values[0]
+
+        u_bars = u_bars.reshape((spatial_length, files_num))
+        theta_bars = theta_bars.reshape((spatial_length, files_num))
+        fig, ax = plt.subplots(2, 1, figsize=(10, 8), constrained_layout=True)
+        T, Alt = np.meshgrid(t, altitude)
+        t_flat = T.flatten()
+        alt_flat = Alt.flatten()
+        u_bars_flat = u_bars.flatten()
+        theta_bars_flat = theta_bars.flatten()
+        # カラーバーの追加
+        vmin = min(np.nanmin(u_bars), np.nanmin(theta_bars))
+        vmax = max(np.nanmax(u_bars), np.nanmax(theta_bars))
+        cmap = "bwr"
+        sc0 = ax[0].scatter(t_flat, alt_flat, c=u_bars_flat, cmap=cmap)
+        sc1 = ax[1].scatter(t_flat, alt_flat, c=theta_bars_flat, cmap=cmap)
+
+        cbar = fig.colorbar(sc1, ax=ax, orientation="vertical", fraction=0.02, pad=0.04)
+        plt.show()
+"""
+
+    
 def process_netcdf_directory(directory, confirm=False):
     processor = NetCDFProcessor(directory)
     #processor.plot_variables()
     processor.plot_u_theta(confirm)
+    #processor.scatter_plot_u_theta()
     
 if __name__ == '__main__':
     import argparse
