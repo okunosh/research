@@ -23,6 +23,7 @@ class NumericalDatasetToNetcdf(DatasetToNetcdf):
             "u_bar": sim.u_bar,
             "theta_bar": sim.theta_bar,
             "K": sim.K,  #need to be changed!!
+            #"K_file":sim.K_file,
             "alpha": sim.alpha_deg,
             "theta_0": sim.theta_0,
             "Theta": sim.Theta,
@@ -62,7 +63,7 @@ class NumericalDatasetToNetcdf(DatasetToNetcdf):
     
 class Simulation(WaveResolutions):
 
-    def __init__(self, g, alpha_deg, Theta, theta_0, gamma, omega, K, num, dt, K_file):
+    def __init__(self, g, alpha_deg, Theta, theta_0, gamma, omega, K, num, dt, K_file, surface_temp_file):
         super().__init__(g, alpha_deg, Theta, theta_0, gamma, omega, K, None, num)
         self.dt = dt
         self.dn = 2* np.pi * self.l_plus / self.num
