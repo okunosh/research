@@ -54,24 +54,23 @@ def calculation(g,  alpha_deg, Theta, theta_0, gamma, omega, K, omega_t_value, n
 
 if __name__ == "__main__":
         #Parameters
-        num = 260
-        alpha_deg = 0.41
-        Theta = 5.
-        K = 3.
+        num = 10#260
+        alpha_deg = 0.96
+        Theta = 40.
+        K = 100.
         
         #Earth parameters----------
+        """
         g = 9.81
         omega = 7.28e-5 #2*pi /86400
         theta_0 = 288.
         gamma = 3.e-3
-        
+        """
         #Mars parameters-----------
-        """
-        #g = 3.72 #Mars
-        #omega = 7.08e-5 #2*pi /88775
-        #theta_0 = 210
-        #gamma = 4.5e-3
-        """
+        g = 3.72 #Mars
+        omega = 7.08e-5 #2*pi /88775
+        theta_0 = 210
+        gamma = 4.02e-3
 
         #time parameters------------
         #omega_t_values = [0, 0.25*np.pi, 0.5*np.pi, 0.75*np.pi, np.pi, 1.25*np.pi, 1.5*np.pi, 1.75*np.pi, 2*np.pi]
@@ -80,10 +79,10 @@ if __name__ == "__main__":
         day2sec = 24 * 3600
         t_fin = day * day2sec
         omega_t_values = omega * np.arange(0, t_fin+1, 3600)
-        psi = 0.
+        psi = 3/2*np.pi
 
         #path
-        output_path ="output/results"
+        output_path ="output/test"#"output/results"
 
         #calculate & save to netcdf
         for j in range(len(omega_t_values)):
