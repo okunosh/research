@@ -2,6 +2,7 @@ import numpy as np
 import xarray as xr
 import os
 import sys
+from datetime import datetime
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from data_to_netcdf import DatasetToNetcdf
 
@@ -23,10 +24,9 @@ class NumericalDatasetToNetcdf(DatasetToNetcdf):
             "u_bar": sim.u_bar,
             "theta_bar": sim.theta_bar,
             "K": sim.K,  #need to be changed!!
-            #"K_file":sim.K_file,
             "alpha": sim.alpha_deg,
             "theta_0": sim.theta_0,
-            "Theta": sim.Theta,
+            "Theta": sim.Theta,#No use. change to "surface_temperature": sim.surface_temp
             "gamma": sim.gamma,
             "N": sim.N,
             "N_alpha": sim.N_alpha,
@@ -41,6 +41,9 @@ class NumericalDatasetToNetcdf(DatasetToNetcdf):
             "flow_regime": sim.resolutions()["regime"]
         }
         ds = DatasetToNetcdf.make_dataset(sim_data)
+        ds["surface_forcing"] = (["time"], np.array([sim.surface_temp]), {"description": "file path of surface forcing"})
+        ds["K_file"] = (["time"], np.array([sim.K_file]), {"description": "file path of K distribution"})
+        
         ds = ds.assign_attrs(title="Numerical solution", flow_regime=sim_data["flow_regime"])
         #change attributes order
         existing_attrs = ds.attrs
@@ -63,8 +66,11 @@ class NumericalDatasetToNetcdf(DatasetToNetcdf):
     
 class Simulation(WaveResolutions):
 
-    def __init__(self, g, alpha_deg, Theta, theta_0, gamma, omega, K, num, dt, K_file, surface_temp_file):
-        super().__init__(g, alpha_deg, Theta, theta_0, gamma, omega, K, None, num)
+    def __init__(self, g, alpha_deg, Theta, theta_0, gamma, omega, K, num, dt, K_file, surface_temp):
+        ds = xr.open_dataset(K_file)
+        K_val = ds.K.values[:,0][0] #空間方向に一様な場合は最初の値だけを採用する。一様でない場合は使えない。
+        
+        super().__init__(g, alpha_deg, Theta, theta_0, gamma, omega, K_val, None, num)
         self.dt = dt
         self.dn = 2* np.pi * self.l_plus / self.num
         self.mat_num = self.num+1
@@ -80,6 +86,7 @@ class Simulation(WaveResolutions):
         self.times = np.arange(0, self.t_fin+1, self.dt)
         #-----------------
         self.K_file = K_file
+        self.surface_temp = surface_temp
 
         
     def make_w_init(self):
@@ -135,18 +142,15 @@ class Simulation(WaveResolutions):
         return block_matrix
     
     def run_simulation(self, output_path, dt):
-        from datetime import datetime
-        surf_con = xr.open_dataset("TestGroundTheta0.nc")
+        surf_con = xr.open_dataset(self.surface_temp)
         surface_theta = surf_con.theta_0.values
-        print(datetime.now().time())
+        #print(datetime.now().time())
         K_ds = xr.open_dataset(self.K_file)
         K_vec = K_ds.K.values#.reshape(K_ds.K.values.shape[1], K_ds.K.values.shape[0])
         
         for m, t in enumerate(self.times):
             num = m%(24*3600*10)
             K_ = K_vec[:,num]
-            #print(K_, K_.shape)
-            #input("stop")
             matrix = self.update_block_matrix(K_)
             self.w = matrix @ self.w
             #self.w[self.num+1] = self.Theta*np.sin(self.omega * t)
@@ -154,15 +158,23 @@ class Simulation(WaveResolutions):
             self.w[self.num+1] = surface_theta[num]
                 
             if t%3600 == 0:
+                #update parameters
                 self.time = t
                 self.u_bar = self.w[:self.num +1 ]
                 self.theta_bar = self.w[self.num + 1:]
+                
+                self.K = K_[0]
+                self.l_plus = np.sqrt(2 * self.K / self.omega_plus)
+                self.l_minus = np.sqrt(2 * self.K / self.omega_minus)
+                self.n = np.linspace(0, 2.*np.pi*self.l_plus, self.num+1)
+                
                 ds = NumericalDatasetToNetcdf.make_dataset(self)
                 data = NumericalDatasetToNetcdf(ds)
                 if m==0:
                     new_dir_path = data.make_new_dir_path(output_path, dt)
                     data.make_new_dir(new_dir_path)
+                    #condition manager!
                 data.save_to_netcdf(new_dir_path)
-                print("finished"+str(t), datetime.now().time())
+                #print("finished:"+str(t), datetime.now().time())
         process_netcdf_directory(new_dir_path)
-        print(datetime.now().time())
+        #print(datetime.now().time())
