@@ -5,7 +5,7 @@ import xarray as xr
 from datetime import datetime
 import warnings
 from simulation_def import Simulation
-from condition_manager import write_conditions_to_file, handle_error, setup_signal_handler
+from condition_manager import write_conditions_to_file, handle_error, setup_signal_handler, log_error
 
 
 def show_params(params):
@@ -17,17 +17,16 @@ def show_params(params):
     
 if __name__ == "__main__":
     # Parameters
-    num = 260
-    alpha_deg = 0.9
+    num = 10#260
+    alpha_deg = 0.96 #0.48/2
     Theta = 100.
-    K = 100. #to decide l_+ (height)
-    K_file = "K/Day100_night3.nc"
-    surf_temp = "TestGroundTheta0.nc"
+    K = None #to decide l_+ (height)
+    K_file = "K/testdata/test_num10.nc"
+    surf_temp = "GroundTemp_cos.nc"#"TestGroundTheta0.nc"
 
     dt = 1.e-1
     #path
-    output_path ="output/results"
-
+    output_path = "output/test" #"output/results"
     
     #Earth
     """
@@ -55,7 +54,7 @@ if __name__ == "__main__":
         "omega": 7.08e-5,  # 2*pi /88750
         "theta_0": 210.,
         "surface_temp": surf_temp,
-        "gamma": 0.25*4.5e-3,
+        "gamma": 4.02e-3,
         "dt": dt,
         "output_path": output_path
     }
@@ -76,7 +75,9 @@ if __name__ == "__main__":
 
     write_conditions_to_file('../calculation_conditions.csv', params, None)
     setup_signal_handler(params)
+    sim.run_simulation(params["output_path"], params['dt'])
 
+"""
     try:
         sim.run_simulation(params["output_path"], params['dt'])
         write_conditions_to_file('../calculation_conditions.csv', params, 1)
@@ -85,3 +86,4 @@ if __name__ == "__main__":
         #print("inturrupted!")
         log_error(str(e))
         write_conditions_to_file("../calculation_conditions.csv", params, 0)
+"""
