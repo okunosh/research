@@ -7,8 +7,10 @@ from datetime import datetime
 def write_conditions_to_file(filename, conditions, completed):
     data = conditions.copy()
     data['Completed'] = completed
-    data['now'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    df = pd.DataFrame([data])
+    data['today'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # Reorder columns to have 'now' as the first column
+    columns_order = ['now'] + [col for col in data if col != 'today']
+    df = pd.DataFrame([data], columns=columns_order)
     
     if os.path.isfile(filename):
         df.to_csv(filename, mode='a', header=False, index=False)

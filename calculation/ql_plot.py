@@ -71,8 +71,124 @@ class NetCDFProcessor:
         #save_file_name2 = f"{}/{base_name}.png"
         plt.savefig(save_file_name, dpi=300)
 
-    def plot_u_theta(self, confirm=False): #heat map---------------------------------------
-        """plot u_bar & theta_bar"""
+    def load_data(self): #netcdf
+        filtered_files = self.filter_files_by_time()
+        files_num = len(filtered_files) #times
+        
+        first_file_path = os.path.join(self.directory, filtered_files[0])
+        ds0 = xr.open_dataset(first_file_path)
+
+        spatial_length = ds0.altitude.values.shape[0]
+        l_plus = ds0.l_plus.values[0]
+        altitude = ds0.altitude.values
+        upper_alt = 2 * np.pi * l_plus
+
+        #K------------------------------------
+        K_file = ds0.K_file.values[0]
+        print(K_file)
+        dsK = xr.open_dataset(K_file, engine='netcdf4')
+        K = dsK.K.values[0,::36000]
+        
+        range_number = int((files_num-1) / K.shape[0])
+        Ks = dsK.K.values[0,::36000]
+        for _ in range(range_number-1):
+            Ks = np.hstack((Ks,K))
+        Ks = np.hstack((Ks, K[-1])) #last 
+        #Ks = Ks.reshape((files_num))
+        #print("K:", Ks.shape)
+        #--------------------------------------
+        
+        #u_bars, theta_bars = np.zeros((files_num, spatial_length,1))*np.nan, np.zeros((files_num, spatial_length,1))*np.nan
+        u_bars, theta_bars = np.zeros((spatial_length,1, files_num))*np.nan, np.zeros((spatial_length,1, files_num))*np.nan
+        print(u_bars.shape)
+        t = np.arange(0, files_num)
+        
+        for i, file in enumerate(filtered_files):
+            file_path = os.path.join(self.directory, file)
+            ds = xr.open_dataset(file_path)
+            
+            u_bar = ds.u_bar.values
+            theta_bar = ds.theta_bar.values
+
+            #u_bars[i,:,:] = u_bar
+            #theta_bars[i,:,:] = theta_bar
+
+            u_bars[:,:,i] = u_bar
+            theta_bars[:,:,i] = theta_bar
+            
+
+        u_bars = u_bars.reshape((spatial_length, files_num))
+        theta_bars = theta_bars.reshape((spatial_length, files_num))
+        print(altitude.shape, t.shape, u_bars.shape, theta_bars.shape)
+
+        return altitude, t, u_bars, theta_bars, Ks
+
+def plot_u_theta(directory, altitude, t, u_bars, theta_bars, Ks, confirm):
+    fig, ax = plt.subplots(2, 1, figsize=(10, 8), constrained_layout=True)
+    
+    """
+    print("altitude: ", altitude.shape)
+    print("t:" , t.shape)
+    print("u_bars: ",u_bars.shape)
+    print("theta_bars: ", theta_bars.shape)
+    #input('check the u_bars')
+    """
+    
+    T, Alt = np.meshgrid(t, altitude)
+    # カラーバーの追加
+    vmin = min(np.nanmin(u_bars), np.nanmin(theta_bars))
+    vmax = max(np.nanmax(u_bars), np.nanmax(theta_bars))
+
+    # pcolormeshの描画
+    color = "bwr"
+    cmap = plt.get_cmap(color)
+    norm = TwoSlopeNorm(vmin=vmin, vcenter=0, vmax=vmax)
+    shading = "auto"
+    
+    c1 = ax[0].pcolormesh(T, Alt, u_bars, norm=norm, cmap=cmap) 
+    c2 = ax[1].pcolormesh(T, Alt, theta_bars, norm=norm, cmap=cmap)
+    
+    cbar = fig.colorbar(c1, ax=ax, orientation="vertical", fraction=0.02, pad=0.04)
+    
+    days = np.arange(0, t.shape[0], 24)
+
+    #right axes for K plot
+    for column in range(2):
+        twinx = ax[column].twinx()
+        twinx.scatter(t,Ks, s=5,color="black", alpha=0.7)
+        twinx.set_ylabel("K")
+        twinx.set_yticks(np.arange(0,101,20))
+    
+    #labels and titles
+    ax[0].set_xlabel('t [hour]')
+    ax[0].set_xticks(days)
+    ax[0].set_ylabel('altitude [m]')
+    ax[0].set_title(r'$\overline{u}$')
+    ax[1].set_xlabel('t [hour]')
+    ax[1].set_xticks(days)
+    ax[1].set_ylabel('altitude [m]')
+    ax[1].set_title(r"$\overline{\theta}$")
+    
+    if confirm==True:
+        print("If you want to save the fig, you need -> confirm==False")
+        plt.show()
+    else:
+        base_name = os.path.basename(directory.rstrip('/'))
+        save_file_name = f"{directory}/{base_name}.png"
+        
+        #save_dir2 = ""
+        #save_file_name2 = f"{}/{base_name}.png"
+        plt.savefig(save_file_name, dpi=300)
+
+
+def load_datasets(directory):
+    processor = NetCDFProcessor(directory)
+    altitude, t, u_bars, theta_bars = processor.load_data()
+    return altitude, t, u_bars, theta_bars
+
+"""
+    #no use?
+    def scatter_plot_u_theta(self):
         filtered_files = self.filter_files_by_time()
         files_num = len(filtered_files) #times
         
@@ -109,48 +225,26 @@ class NetCDFProcessor:
         theta_bars = theta_bars.reshape((spatial_length, files_num))
         fig, ax = plt.subplots(2, 1, figsize=(10, 8), constrained_layout=True)
         T, Alt = np.meshgrid(t, altitude)
+        t_flat = T.flatten()
+        alt_flat = Alt.flatten()
+        u_bars_flat = u_bars.flatten()
+        theta_bars_flat = theta_bars.flatten()
         # カラーバーの追加
         vmin = min(np.nanmin(u_bars), np.nanmin(theta_bars))
         vmax = max(np.nanmax(u_bars), np.nanmax(theta_bars))
-        
-        # pcolormeshの描画
-        color = "bwr"
-        cmap = plt.get_cmap(color)
-        norm = TwoSlopeNorm(vmin=vmin, vcenter=0, vmax=vmax)
-        shading = "auto"
-         
-        c1 = ax[0].pcolormesh(T, Alt, u_bars, norm=norm, cmap=cmap) 
-        c2 = ax[1].pcolormesh(T, Alt, theta_bars, norm=norm, cmap=cmap)
-        
-        cbar = fig.colorbar(c1, ax=ax, orientation="vertical", fraction=0.02, pad=0.04)
+        cmap = "bwr"
+        sc0 = ax[0].scatter(t_flat, alt_flat, c=u_bars_flat, cmap=cmap)
+        sc1 = ax[1].scatter(t_flat, alt_flat, c=theta_bars_flat, cmap=cmap)
 
-        days = np.arange(0, 97, 24)
-        
-        #labels and titles
-        ax[0].set_xlabel('t [hour]')
-        ax[0].set_xticks(days)
-        ax[0].set_ylabel('altitude [m]')
-        ax[0].set_title(r'$\overline{u}$')
-        ax[1].set_xlabel('t [hour]')
-        ax[1].set_xticks(days)
-        ax[1].set_ylabel('altitude [m]')
-        ax[1].set_title(r"$\overline{\theta}$")
+        cbar = fig.colorbar(sc1, ax=ax, orientation="vertical", fraction=0.02, pad=0.04)
+        plt.show()
+"""
 
-        if confirm==True:
-            print("If you want to save the fig, you need -> confirm==False")
-            plt.show()
-        else:
-            base_name = os.path.basename(self.directory.rstrip('/'))
-            save_file_name = f"{self.directory}/{base_name}.png"
-            
-            #save_dir2 = ""
-            #save_file_name2 = f"{}/{base_name}.png"
-            plt.savefig(save_file_name, dpi=300)
-
+    
 def process_netcdf_directory(directory, confirm=False):
     processor = NetCDFProcessor(directory)
-    #processor.plot_variables()
-    processor.plot_u_theta(confirm)
+    altitude, t, u_bars, theta_bars, Ks = processor.load_data()
+    plot_u_theta(directory, altitude, t, u_bars, theta_bars, Ks,confirm)
     
 if __name__ == '__main__':
     import argparse
