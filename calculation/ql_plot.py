@@ -83,11 +83,21 @@ class NetCDFProcessor:
         altitude = ds0.altitude.values
         upper_alt = 2 * np.pi * l_plus
 
-        K_file = ds0.K_file.values
-        dsK = xr.open_dataset(K_file)
-        K = dsK.K.values
-        print("K:", K.shape)
-        input("stop")
+        #K------------------------------------
+        K_file = ds0.K_file.values[0]
+        print(K_file)
+        dsK = xr.open_dataset(K_file, engine='netcdf4')
+        K = dsK.K.values[0,::36000]
+        
+        range_number = int((files_num-1) / K.shape[0])
+        Ks = dsK.K.values[0,::36000]
+        for _ in range(range_number-1):
+            Ks = np.hstack((Ks,K))
+        Ks = np.hstack((Ks, K[-1])) #last 
+        #Ks = Ks.reshape((files_num))
+        #print("K:", Ks.shape)
+        #--------------------------------------
+        
         #u_bars, theta_bars = np.zeros((files_num, spatial_length,1))*np.nan, np.zeros((files_num, spatial_length,1))*np.nan
         u_bars, theta_bars = np.zeros((spatial_length,1, files_num))*np.nan, np.zeros((spatial_length,1, files_num))*np.nan
         print(u_bars.shape)
@@ -111,9 +121,9 @@ class NetCDFProcessor:
         theta_bars = theta_bars.reshape((spatial_length, files_num))
         print(altitude.shape, t.shape, u_bars.shape, theta_bars.shape)
 
-        return altitude, t, u_bars, theta_bars
+        return altitude, t, u_bars, theta_bars, Ks
 
-def plot_u_theta(directory, altitude, t, u_bars, theta_bars, confirm):
+def plot_u_theta(directory, altitude, t, u_bars, theta_bars, Ks, confirm):
     fig, ax = plt.subplots(2, 1, figsize=(10, 8), constrained_layout=True)
     
     """
@@ -140,7 +150,14 @@ def plot_u_theta(directory, altitude, t, u_bars, theta_bars, confirm):
     
     cbar = fig.colorbar(c1, ax=ax, orientation="vertical", fraction=0.02, pad=0.04)
     
-    days = np.arange(0, 97, 24)
+    days = np.arange(0, t.shape[0], 24)
+
+    #right axes for K plot
+    for column in range(2):
+        twinx = ax[column].twinx()
+        twinx.scatter(t,Ks, s=5,color="black", alpha=0.7)
+        twinx.set_ylabel("K")
+        twinx.set_yticks(np.arange(0,101,20))
     
     #labels and titles
     ax[0].set_xlabel('t [hour]')
@@ -226,14 +243,8 @@ def load_datasets(directory):
     
 def process_netcdf_directory(directory, confirm=False):
     processor = NetCDFProcessor(directory)
-<<<<<<< Updated upstream
-    #processor.plot_variables()
-    processor.plot_u_theta(confirm)
-    #processor.scatter_plot_u_theta()
-=======
-    altitude, t, u_bars, theta_bars = processor.load_data()
-    plot_u_theta(directory, altitude, t, u_bars, theta_bars, confirm)
->>>>>>> Stashed changes
+    altitude, t, u_bars, theta_bars, Ks = processor.load_data()
+    plot_u_theta(directory, altitude, t, u_bars, theta_bars, Ks,confirm)
     
 if __name__ == '__main__':
     import argparse
