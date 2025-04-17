@@ -22,6 +22,7 @@ def K_condition2(t_arr, space_res):#6-18: K=3, 18- : K=100
     dusk = 18*36000
     arr = np.ones_like(t_arr)*3
     arr[dawn:dusk] = 100
+
     K_arr = np.tile(arr, (space_res, 1))
     return K_arr
 
@@ -110,7 +111,6 @@ if __name__ == '__main__':
         n_arr = np.arange(0, space_res)    
         t_arr = np.arange(0, DAY_SEC, time_res)
         len_tarr = len(t_arr)
-    
         #K_arr = K_const(100, time_res, space_res, t_arr)
         K_arr = K_condition2(t_arr, space_res)
         #K_arr = K_condition3(space_res)
