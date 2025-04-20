@@ -130,6 +130,7 @@ def make_boundary(output, save):
     
 if __name__ == "__main__":
 
+    
     comparePlot()
     """
     output = "TestGroundTheta0.nc"

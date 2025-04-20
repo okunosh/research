@@ -37,12 +37,14 @@ class NumericalDatasetToNetcdf(DatasetToNetcdf):
             "l_minus": sim.l_minus,
             "altitude": sim.n,
             "time": np.array([sim.time]),
+            "dn": np.array([sim.dn]),
             "planet": sim.planet,
             "flow_regime": sim.resolutions()["regime"]
         }
         ds = DatasetToNetcdf.make_dataset(sim_data)
         ds["surface_forcing"] = (["time"], np.array([sim.surface_temp]), {"description": "file path of surface forcing"})
         ds["K_file"] = (["time"], np.array([sim.K_file]), {"description": "file path of K distribution"})
+        ds["dn"] = (["time"], np.array([sim.dn]), {"description": "the number of grids for spatioal dirction"})
         
         ds = ds.assign_attrs(title="Numerical solution", flow_regime=sim_data["flow_regime"])
         #change attributes order
@@ -93,11 +95,19 @@ class Simulation(WaveResolutions):
         return np.zeros((self.mat_num)*2).reshape((self.mat_num)*2,1)
 
     #block matrix
+    """
     def updateK(self, K): #K: raw vector whose length is equal to self.mat_num
         coef = self.dt / self.dn**2
         E = np.ones_like(K)
         A = coef * K
         AA = E - 2*coef*K
+        return A, AA
+    """
+    def updateK(self, K): #K: raw vector whose length is equal to self.mat_num
+        coeff = self.dt *  self.num**2 * self.omega_plus / 8/ np.pi**2
+        E = np.ones_like(K)
+        A = np.ones_like(K)*coeff
+        AA = E - 2*A
         return A, AA
         
     def make_off_diagonal(self, val):
@@ -151,10 +161,14 @@ class Simulation(WaveResolutions):
         for m, t in enumerate(self.times):
             num = m%(24*3600*10)
             K_ = K_vec[:,num]
+            self.K = K_[0]
+            self.l_plus = np.sqrt(2 * self.K / self.omega_plus)
+            self.l_minus = np.sqrt(2 * self.K / self.omega_minus)
+            self.n = np.linspace(0, 2.*np.pi*self.l_plus, self.num+1)
+
             matrix = self.update_block_matrix(K_)
+            self.dn =  2* np.pi * self.l_plus / self.num
             self.w = matrix @ self.w
-            #self.w[self.num+1] = self.Theta*np.sin(self.omega * t)
-            #self.w[self.num+1] = surface_theta_0(self.Theta, self.omega, t)
             self.w[self.num+1] = surface_theta[num]
                 
             if t%3600 == 0:
@@ -162,11 +176,6 @@ class Simulation(WaveResolutions):
                 self.time = t
                 self.u_bar = self.w[:self.num +1 ]
                 self.theta_bar = self.w[self.num + 1:]
-                
-                self.K = K_[0]
-                self.l_plus = np.sqrt(2 * self.K / self.omega_plus)
-                self.l_minus = np.sqrt(2 * self.K / self.omega_minus)
-                self.n = np.linspace(0, 2.*np.pi*self.l_plus, self.num+1)
                 
                 ds = NumericalDatasetToNetcdf.make_dataset(self)
                 data = NumericalDatasetToNetcdf(ds)
