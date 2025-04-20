@@ -63,7 +63,7 @@ class DatasetToNetcdf:
         return gamma_show
 
     def padded_time(self, time_value):
-        return f"{int(time_value):07}"
+        return f"{round(time_value):07}"
 
     def make_new_dir_path(self, output_path):
         new_dir_path = f"{output_path}/{self.planet}/{self.now}_{self.flow_regime}_num{self.num}_alp{self.alpha}_gamma{self.gamma}"
