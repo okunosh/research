@@ -48,8 +48,8 @@ def K_condition4(t_arr, space_res):
     return K_arr
 
 def K_standard(t_arr, space_res, amplitude):#sin distributuion at all altitude
-    Ksts = amplitude * np.cos(2*np.pi * ((t_arr - 1*3600) / DAY_SEC)) * (-1)
-    #Ksts = amplitude * np.sin(2*np.pi * (t_arr / DAY_SEC)) #sample
+    #Ksts = amplitude * np.cos(2*np.pi * ((t_arr - 1*3600) / DAY_SEC)) * (-1)
+    Ksts = amplitude * np.sin(2*np.pi * (t_arr / DAY_SEC)) #sample
     K_arr = np.tile(Ksts, (space_res, 1))
     return K_arr
 
@@ -103,7 +103,7 @@ def saveToNetcdf(ds, path, confirm=False):
        
         
 if __name__ == '__main__':
-    save_name = "K/testdata/test_num10_2" #output name
+    save_name = "K/testdata/test_num10_sin" #output name
     nc_path = save_name+".nc"
     png_path = save_name+".png"
 
@@ -112,10 +112,10 @@ if __name__ == '__main__':
         t_arr = np.arange(0, DAY_SEC, time_res)
         len_tarr = len(t_arr)
         #K_arr = K_const(100, time_res, space_res, t_arr)
-        K_arr = K_condition2(t_arr, space_res)
+        #K_arr = K_condition2(t_arr, space_res)
         #K_arr = K_condition3(space_res)
         #K_arr = K_condition4(t_arr, space_res)
-        #K_arr = K_standard(t_arr, space_res, 40)
+        K_arr = K_standard(t_arr, space_res, 40)
         
         K = K_arr.reshape(space_res, len_tarr)
         

@@ -83,6 +83,7 @@ class NetCDFProcessor:
         altitude = ds0.altitude.values
         upper_alt = 2 * np.pi * l_plus
 
+
         #K------------------------------------
         K_file = ds0.K_file.values[0]
         print(K_file)
@@ -97,11 +98,13 @@ class NetCDFProcessor:
         #Ks = Ks.reshape((files_num))
         #print("K:", Ks.shape)
         #--------------------------------------
-        
+        Ks = dsK.K.values[0,:]
         #u_bars, theta_bars = np.zeros((files_num, spatial_length,1))*np.nan, np.zeros((files_num, spatial_length,1))*np.nan
         u_bars, theta_bars = np.zeros((spatial_length,1, files_num))*np.nan, np.zeros((spatial_length,1, files_num))*np.nan
         print(u_bars.shape)
         t = np.arange(0, files_num)
+        ts = np.repeat(t, spatial_length)
+        altitudes = np.ones((spatial_length,1, files_num))*np.nan
         
         for i, file in enumerate(filtered_files):
             file_path = os.path.join(self.directory, file)
@@ -109,19 +112,169 @@ class NetCDFProcessor:
             
             u_bar = ds.u_bar.values
             theta_bar = ds.theta_bar.values
+            alt = ds.altitude.values
 
             #u_bars[i,:,:] = u_bar
             #theta_bars[i,:,:] = theta_bar
 
             u_bars[:,:,i] = u_bar
             theta_bars[:,:,i] = theta_bar
-            
+            altitudes[:,:,i] = alt.reshape((alt.shape[0], 1))
 
         u_bars = u_bars.reshape((spatial_length, files_num))
         theta_bars = theta_bars.reshape((spatial_length, files_num))
+        altitudes = altitudes.reshape((spatial_length, files_num))
+        print(altitude.shape, t.shape, u_bars.shape, theta_bars.shape, altitudes.shape)
+
+        return altitudes, ts, u_bars, theta_bars ,Ks
+
+    def load_data_analytical(self): #netcdf for analytical not use K_file
+        filtered_files = self.filter_files_by_time()
+        files_num = len(filtered_files) #times
+        
+        first_file_path = os.path.join(self.directory, filtered_files[0])
+        ds0 = xr.open_dataset(first_file_path)
+
+        spatial_length = ds0.altitude.values.shape[0]
+        l_plus = ds0.l_plus.values[0]
+        altitude = ds0.altitude.values
+        upper_alt = 2 * np.pi * l_plus
+
+        u_bars, theta_bars = np.zeros((spatial_length,1, files_num))*np.nan, np.zeros((spatial_length,1, files_num))*np.nan
+        print(u_bars.shape)
+        t = np.arange(0, files_num)
+        ts = np.repeat(t, spatial_length)
+        altitudes = np.ones((spatial_length,1, files_num))*np.nan
+        
+        for i, file in enumerate(filtered_files):
+            file_path = os.path.join(self.directory, file)
+            ds = xr.open_dataset(file_path)
+            
+            u_bar = ds.u_bar.values
+            theta_bar = ds.theta_bar.values
+            alt = ds.altitude.values
+
+            #u_bars[i,:,:] = u_bar
+            #theta_bars[i,:,:] = theta_bar
+
+            u_bars[:,:,i] = u_bar
+            theta_bars[:,:,i] = theta_bar
+            altitudes[:,:,i] = alt.reshape((alt.shape[0], 1))
+
+        u_bars = u_bars.reshape((spatial_length, files_num))
+        theta_bars = theta_bars.reshape((spatial_length, files_num))
+        altitudes = altitudes.reshape((spatial_length, files_num))
         print(altitude.shape, t.shape, u_bars.shape, theta_bars.shape)
 
-        return altitude, t, u_bars, theta_bars, Ks
+        return altitudes, ts, u_bars, theta_bars
+#
+def reshape_array_for_scatter(arr):
+    spatial_length, time_length = arr.shape[0], arr.shape[1]
+    return arr.T.reshape((1,time_length*spatial_length))
+#
+def scatter_plot_u_theta(directory, altitudes, ts, u_bars, theta_bars, Ks,  confirm):
+
+    altitudes = reshape_array_for_scatter(altitudes)
+    #ts = reshape_array_for_scatter(ts)
+    u_bars = reshape_array_for_scatter(u_bars)
+    theta_bars = reshape_array_for_scatter(theta_bars)
+
+    day = np.unique(ts).shape[0]
+
+    t_K = np.arange(0, 3600*(day-1), 0.1)
+    t_K_hour = t_K/3600
+
+    K_days = np.tile((Ks), int((day-1)/24) )
+    print(day, t_K_hour.shape, K_days.shape)
+    
+    days = np.arange(0,day,24)
+    if confirm==True:
+        print(altitudes.shape)
+        print()
+        fig, ax = plt.subplots(2, 1, figsize=(10, 8), constrained_layout=True)
+        # カラーバーの追加
+        vmin = min(np.nanmin(u_bars), np.nanmin(theta_bars))
+        vmax = max(np.nanmax(u_bars), np.nanmax(theta_bars))
+        cmap = "bwr"
+        sc0 = ax[0].scatter(ts, altitudes, c=u_bars, cmap=cmap, s=5, marker="o")
+        sc1 = ax[1].scatter(ts, altitudes, c=theta_bars, cmap=cmap, s=5, marker="o")
+        cbar = fig.colorbar(sc1, ax=ax, orientation="vertical", fraction=0.02, pad=0.04)
+
+        for column in range(2):
+            twinx = ax[column].twinx()
+            twinx.scatter(t_K_hour, K_days, s=1,color="black", alpha=0.7, marker=".")
+            twinx.set_ylabel("K")
+            twinx.set_yticks(np.arange(0,101,20))
+        #labels and titles
+        #ax[0].scatter(t_K_hour, K_days)
+        ax[0].set_xlabel('t [hour]')
+        ax[0].set_xticks(days)
+        ax[0].set_ylabel('altitude [m]')
+        ax[0].set_title(r'$\overline{u}$')
+        ax[1].set_xlabel('t [hour]')
+        ax[1].set_xticks(days)
+        ax[1].set_ylabel('altitude [m]')
+        ax[1].set_title(r"$\overline{\theta}$")
+        base_name = os.path.basename(directory.rstrip('/'))
+        save_file_name = f"{directory}/{base_name}.png"
+        
+        #save_dir2 = ""
+        #save_file_name2 = f"{}/{base_name}.png"
+        plt.savefig(save_file_name, dpi=300)
+        plt.close()
+
+#temporal file for analytical plot
+def scatter_plot_u_theta_analytical(directory, altitudes, ts, u_bars, theta_bars,confirm):
+
+    altitudes = reshape_array_for_scatter(altitudes)
+    #ts = reshape_array_for_scatter(ts)
+    u_bars = reshape_array_for_scatter(u_bars)
+    theta_bars = reshape_array_for_scatter(theta_bars)
+
+    day = np.unique(ts).shape[0]
+
+    #t_K = np.arange(0, 3600*(day-1), 0.1)
+    #t_K_hour = t_K/3600
+
+    #K_days = np.tile((Ks), int((day-1)/24) )
+    #print(day, t_K_hour.shape, K_days.shape)
+    
+    days = np.arange(0,day,24)
+    if confirm==True:
+        print(altitudes.shape)
+        fig, ax = plt.subplots(2, 1, figsize=(10, 8), constrained_layout=True)
+        # カラーバーの追加
+        vmin = min(np.nanmin(u_bars), np.nanmin(theta_bars))
+        vmax = max(np.nanmax(u_bars), np.nanmax(theta_bars))
+        cmap = "bwr"
+        sc0 = ax[0].scatter(ts, altitudes, c=u_bars, cmap=cmap, s=5, marker="o")
+        sc1 = ax[1].scatter(ts, altitudes, c=theta_bars, cmap=cmap, s=5, marker="o")
+        cbar = fig.colorbar(sc1, ax=ax, orientation="vertical", fraction=0.02, pad=0.04)
+        """
+        for column in range(2):
+            twinx = ax[column].twinx()
+            twinx.scatter(t_K_hour, K_days, s=1,color="black", alpha=0.7, marker=".")
+            twinx.set_ylabel("K")
+            twinx.set_yticks(np.arange(0,101,20))
+        """
+        #labels and titles
+        #ax[0].scatter(t_K_hour, K_days)
+        ax[0].set_xlabel('t [hour]')
+        ax[0].set_xticks(days)
+        ax[0].set_ylabel('altitude [m]')
+        ax[0].set_title(r'$\overline{u}$')
+        ax[1].set_xlabel('t [hour]')
+        ax[1].set_xticks(days)
+        ax[1].set_ylabel('altitude [m]')
+        ax[1].set_title(r"$\overline{\theta}$")
+        base_name = os.path.basename(directory.rstrip('/'))
+        save_file_name = f"{directory}/{base_name}.png"
+        
+        #save_dir2 = ""
+        #save_file_name2 = f"{}/{base_name}.png"
+        plt.savefig(save_file_name, dpi=300)
+        plt.close()
+
 
 def plot_u_theta(directory, altitude, t, u_bars, theta_bars, Ks, confirm):
     fig, ax = plt.subplots(2, 1, figsize=(10, 8), constrained_layout=True)
@@ -186,65 +339,23 @@ def load_datasets(directory):
     altitude, t, u_bars, theta_bars = processor.load_data()
     return altitude, t, u_bars, theta_bars
 
-"""
-    #no use?
-    def scatter_plot_u_theta(self):
-        filtered_files = self.filter_files_by_time()
-        files_num = len(filtered_files) #times
-        
-        first_file_path = os.path.join(self.directory, filtered_files[0])
-        ds0 = xr.open_dataset(first_file_path)
-
-        spatial_length = ds0.altitude.values.shape[0]
-        l_plus = ds0.l_plus.values[0]
-        altitude = ds0.altitude.values
-        upper_alt = 2 * np.pi * l_plus
-        
-        #u_bars, theta_bars = np.zeros((files_num, spatial_length,1))*np.nan, np.zeros((files_num, spatial_length,1))*np.nan
-        u_bars, theta_bars = np.zeros((spatial_length,1, files_num))*np.nan, np.zeros((spatial_length,1, files_num))*np.nan
-        print(u_bars.shape)
-        t = np.arange(0, files_num)
-        
-        for i, file in enumerate(filtered_files):
-            file_path = os.path.join(self.directory, file)
-            ds = xr.open_dataset(file_path)
-            
-            u_bar = ds.u_bar.values
-            theta_bar = ds.theta_bar.values
-
-            #u_bars[i,:,:] = u_bar
-            #theta_bars[i,:,:] = theta_bar
-
-            u_bars[:,:,i] = u_bar
-            theta_bars[:,:,i] = theta_bar
-            
-            #const_u = ds.Theta.values[0] * ds.N.values[0] / ds.gamma.values[0] / 2
-            #const_theta = ds.Theta.values[0]
-
-        u_bars = u_bars.reshape((spatial_length, files_num))
-        theta_bars = theta_bars.reshape((spatial_length, files_num))
-        fig, ax = plt.subplots(2, 1, figsize=(10, 8), constrained_layout=True)
-        T, Alt = np.meshgrid(t, altitude)
-        t_flat = T.flatten()
-        alt_flat = Alt.flatten()
-        u_bars_flat = u_bars.flatten()
-        theta_bars_flat = theta_bars.flatten()
-        # カラーバーの追加
-        vmin = min(np.nanmin(u_bars), np.nanmin(theta_bars))
-        vmax = max(np.nanmax(u_bars), np.nanmax(theta_bars))
-        cmap = "bwr"
-        sc0 = ax[0].scatter(t_flat, alt_flat, c=u_bars_flat, cmap=cmap)
-        sc1 = ax[1].scatter(t_flat, alt_flat, c=theta_bars_flat, cmap=cmap)
-
-        cbar = fig.colorbar(sc1, ax=ax, orientation="vertical", fraction=0.02, pad=0.04)
-        plt.show()
-"""
-
     
 def process_netcdf_directory(directory, confirm=False):
     processor = NetCDFProcessor(directory)
     altitude, t, u_bars, theta_bars, Ks = processor.load_data()
     plot_u_theta(directory, altitude, t, u_bars, theta_bars, Ks,confirm)
+
+#
+def process_netcdf_directory_scatter(directory, confirm=True):
+    processor = NetCDFProcessor(directory)
+    altitude, t, u_bars, theta_bars, Ks = processor.load_data()
+    scatter_plot_u_theta(directory,altitude, t, u_bars, theta_bars, Ks, confirm)
+
+def process_netcdf_directory_scatter_analytical(directory, confirm=True):
+    processor = NetCDFProcessor(directory)
+    altitude, t, u_bars, theta_bars = processor.load_data_analytical()
+    scatter_plot_u_theta_analytical(directory,altitude, t, u_bars, theta_bars, confirm)
+
     
 if __name__ == '__main__':
     import argparse
@@ -252,4 +363,4 @@ if __name__ == '__main__':
     parser.add_argument('directory', type=str, help='Directory containing NetCDF files')
     
     args = parser.parse_args()
-    process_netcdf_directory(args.directory, confirm=True)
+    process_netcdf_directory_scatter(args.directory, confirm=True)

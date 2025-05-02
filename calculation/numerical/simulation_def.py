@@ -13,7 +13,7 @@ sys.path.append(target_dir)
 sys.path.insert(0, target_dir)
 #print(sys.path)
 from Zardi2014_def import WaveResolutions
-from ql_plot import process_netcdf_directory
+from ql_plot import process_netcdf_directory, process_netcdf_directory_scatter
 from boundary_condition_theta import surface_theta_0
 #-----------------------------------------------
 
@@ -64,7 +64,8 @@ class NumericalDatasetToNetcdf(DatasetToNetcdf):
         output_file = f"{new_dir_path}/{kind}_{self.now}_{self.flow_regime}_t{self.time}.nc"
         #print(output_file)
         self.ds.to_netcdf(output_file)
-        
+
+day2sec = 24 * 3600
     
 class Simulation(WaveResolutions):
 
@@ -80,12 +81,12 @@ class Simulation(WaveResolutions):
         self.C = -self.dt * self.gamma * np.sin(self.alpha)
 
         self.w= self.make_w_init()
-       # self.matrix = self.make_block_matrix() #change!
+        #self.matrix = self.make_block_matrix() #change!
         #time--------------
         self.day = 4
-        self.day2sec = 24 * 3600
-        self.t_fin = self.day * self.day2sec 
-        self.times = np.arange(0, self.t_fin+1, self.dt)
+        self.t_fin = self.day * day2sec 
+        #self.times = np.arange(0, self.t_fin+1, self.dt)
+        self.times = np.linspace(0, self.t_fin, int(self.t_fin/self.dt)+1)
         #-----------------
         self.K_file = K_file
         self.surface_temp = surface_temp
@@ -97,19 +98,12 @@ class Simulation(WaveResolutions):
     #block matrix
     """
     def updateK(self, K): #K: raw vector whose length is equal to self.mat_num
-        coef = self.dt / self.dn**2
-        E = np.ones_like(K)
-        A = coef * K
-        AA = E - 2*coef*K
-        return A, AA
-    """
-    def updateK(self, K): #K: raw vector whose length is equal to self.mat_num
         coeff = self.dt *  self.num**2 * self.omega_plus / 8/ np.pi**2
         E = np.ones_like(K)
         A = np.ones_like(K)*coeff
         AA = E - 2*A
         return A, AA
-        
+    """
     def make_off_diagonal(self, val):
         a = np.diag([val]*self.mat_num)
         a[0,0], a[self.mat_num-1, self.mat_num-1] = 0, 0
@@ -185,5 +179,5 @@ class Simulation(WaveResolutions):
                     #condition manager!
                 data.save_to_netcdf(new_dir_path)
                 #print("finished:"+str(t), datetime.now().time())
-        process_netcdf_directory(new_dir_path)
+        process_netcdf_directory_scatter(new_dir_path)
         #print(datetime.now().time())

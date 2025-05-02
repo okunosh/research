@@ -10,7 +10,7 @@ from Zardi2014_def import WaveResolutions
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from data_to_netcdf import DatasetToNetcdf
-from ql_plot import process_netcdf_directory
+from ql_plot import process_netcdf_directory, process_netcdf_directory_scatter_analytical
 
 class AnalyticalDatasetToNetcdf(DatasetToNetcdf):
     @staticmethod
@@ -55,23 +55,22 @@ def calculation(g,  alpha_deg, Theta, theta_0, gamma, omega, K, omega_t_value, n
 if __name__ == "__main__":
         #Parameters
         num = 10#260
-        alpha_deg = 0.96
+        alpha_deg = 0.24
         Theta = 40.
         K = 100.
         
         #Earth parameters----------
-        """
         g = 9.81
-        omega = 7.28e-5 #2*pi /86400
+        omega = 2*np.pi /86400 #7.28e-5
         theta_0 = 288.
         gamma = 3.e-3
-        """
         #Mars parameters-----------
+        """
         g = 3.72 #Mars
         omega = 7.08e-5 #2*pi /88775
         theta_0 = 210
         gamma = 4.02e-3
-
+        """
         #time parameters------------
         #omega_t_values = [0, 0.25*np.pi, 0.5*np.pi, 0.75*np.pi, np.pi, 1.25*np.pi, 1.5*np.pi, 1.75*np.pi, 2*np.pi]
 
@@ -79,10 +78,10 @@ if __name__ == "__main__":
         day2sec = 24 * 3600
         t_fin = day * day2sec
         omega_t_values = omega * np.arange(0, t_fin+1, 3600)
-        psi = 3/2*np.pi
+        psi = 0#3/2*np.pi
 
         #path
-        output_path ="output/test"#"output/results"
+        output_path ="output/test0501"#output/results"
 
         #calculate & save to netcdf
         for j in range(len(omega_t_values)):
@@ -95,4 +94,4 @@ if __name__ == "__main__":
                 data.make_new_dir(new_dir_path)
             data.save_to_netcdf(new_dir_path)
         #add Quick Look Plot and save png file
-        process_netcdf_directory(new_dir_path)
+        process_netcdf_directory_scatter_analytical(new_dir_path)
