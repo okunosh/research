@@ -17,27 +17,29 @@ def show_params(params):
     
 if __name__ == "__main__":
     # Parameters
-    num = 10#260
-    alpha_deg = 0.96 #0.48/2
+    num = 260
+    alpha_deg = 0.24 #0.48/2
     Theta = 100.
     K = None #to decide l_+ (height)
-    K_file = "K/testdata/test_num10.nc"
-    surf_temp = "GroundTemp_cos.nc"#"TestGroundTheta0.nc"
+    K_file = "K/AllDay_100.nc"#"K/Day100_night3.nc"#"K/testdata/test_num10_2.nc"#"K/AllDay_100.nc"#
+    surf_temp = "SurfTempF_sin.nc" #"TestGroundTheta0.nc"
 
     dt = 1.e-1
     #path
-    output_path = "output/test" #"output/results"
+    output_path = "output/validation_dn_before" #"output/results"
     
     #Earth
-    """
+    
     params = {
         "num": num,
         "alpha_deg": alpha_deg,
         "Theta": Theta,
         "K": K,
+        "K_file":K_file,
         "g": 9.81,
         "omega": 7.28e-5,  # 2*pi /86400
         "theta_0": 288.,
+        "surface_temp": surf_temp,
         "gamma": 3.e-3,
         "dt": dt,
         "output_path": output_path
@@ -58,6 +60,7 @@ if __name__ == "__main__":
         "dt": dt,
         "output_path": output_path
     }
+    """
     
     #show_params(params)
     #calculate

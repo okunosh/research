@@ -17,12 +17,12 @@ def main(analytical_dir, numerical_dir):
     analytical_files = analytical_processor.extract_netcdf_files()
     numerical_files = numerical_processor.extract_netcdf_files()
     print(analytical_files)
-    input('stop')
+    #input('stop')
     num_files = len(analytical_files)
     #input('stop')
 
-    diffs_u_bar = np.zeros((701, 1, num_files))*np.nan  # change the numbers
-    diffs_theta_bar = np.zeros((701,1, num_files))*np.nan  # change the numbers
+    diffs_u_bar = np.zeros((11, 1, num_files))*np.nan  # change the numbers
+    diffs_theta_bar = np.zeros((11,1, num_files))*np.nan  # change the numbers
 
     for i, a_file in enumerate(analytical_files):
         t_index = a_file.split('_t')[-1].split('.')[0]
@@ -63,8 +63,8 @@ def main(analytical_dir, numerical_dir):
     #u_dif_mean = np.mean(diffs_u_bar,axis=2)
     #theta_dif_mean = np.mean(diffs_theta_bar,axis=2)
     altitude = read_variable(os.path.join(numerical_dir, n_file), 'altitude')
-    diffs_u_bar_reshaped = diffs_u_bar.reshape(701, num_files)
-    diffs_theta_bar_reshaped = diffs_theta_bar.reshape(701, num_files)
+    diffs_u_bar_reshaped = diffs_u_bar.reshape(11, num_files)
+    diffs_theta_bar_reshaped = diffs_theta_bar.reshape(11, num_files)
 
     return diffs_u_bar_reshaped, diffs_theta_bar_reshaped, altitude #return reshaped arrays and t
 
@@ -87,8 +87,8 @@ if __name__ == "__main__":
     fig, ax = plt.subplots(1, 2)
     #fig.subplots_adjust(hspace=0)
     # pcolormeshの描画
-    c1 = ax[0].pcolor(T, Alt, diffs_u_bar_reshaped, cmap='coolwarm')
-    c2 = ax[1].pcolor(T, Alt, diffs_theta_bar_reshaped, cmap='coolwarm')
+    c1 = ax[0].pcolor(T, Alt, diffs_u_bar_reshaped, cmap='bwr')
+    c2 = ax[1].pcolor(T, Alt, diffs_theta_bar_reshaped, cmap='bwr')
     
     # 等高線の描画
     #contour1 = ax[0].contour(T, Alt, diffs_u_bar_reshaped, colors='black', linewidths=0.5)
