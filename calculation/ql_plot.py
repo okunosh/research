@@ -171,6 +171,161 @@ class NetCDFProcessor:
 def reshape_array_for_scatter(arr):
     spatial_length, time_length = arr.shape[0], arr.shape[1]
     return arr.T.reshape((1,time_length*spatial_length))
+
+def extract_4th_day(altitude, t, u_bars, theta_bars, Ks):
+    # 4日目のデータだけを抽出
+    altitudes = altitude[:,:25]
+    t_4th_day = t[:25*261]#np.arange(0, 25,1)#t[-25:]
+    t_4th_day = t_4th_day.reshape((1,t_4th_day.shape[0]))
+    u_bars_4th_day = u_bars[:, -25:]
+    theta_bars_4th_day = theta_bars[:, -25:]
+    Ks_4th_day = Ks[-25*864000:]
+    """
+    print('---')
+    print(altitude.shape, altitudes.shape)
+    print(t_4th_day)
+    print("---")
+    """
+    return altitudes, t_4th_day, u_bars_4th_day, theta_bars_4th_day, Ks_4th_day,
+
+import numpy as np
+
+def get_max_min_info(t_4th_day, altitudes, u_bars_4th_day):
+    #Find the maximum and minimum values in an array and their element numbers
+    u_max = np.max(u_bars_4th_day)
+    u_min = np.min(u_bars_4th_day)
+
+    # 最大値・最小値のインデックス（すべて）
+    max_indices = np.flatnonzero(u_bars_4th_day == u_max)
+    min_indices = np.flatnonzero(u_bars_4th_day == u_min)
+
+    # 複数あった場合に警告を出す
+    if len(max_indices) > 1:
+        print(f"警告: 最大値 {u_max:.3g} が {len(max_indices)} 箇所に存在します。最初の1つのみ使用します。")
+    if len(min_indices) > 1:
+        print(f"警告: 最小値 {u_min:.3g} が {len(min_indices)} 箇所に存在します。最初の1つのみ使用します。")
+
+    # 最初のインデックスを使用
+    idx_max = max_indices[0]
+    idx_min = min_indices[0]
+
+    # インデックスに対応する時刻・高度を取得
+    t_max = t_4th_day[0, idx_max]
+    t_min = t_4th_day[0, idx_min]
+    alt_max = altitudes[0, idx_max]
+    alt_min = altitudes[0, idx_min]
+
+    return {
+        'max_value': u_max,
+        'min_value': u_min,
+        't_at_max': t_max,
+        'altitude_at_max': alt_max,
+        't_at_min': t_min,
+        'altitude_at_min': alt_min
+    }
+
+
+
+def plot_4th_day(directory, altitude, t, u_bars, theta_bars, Ks, confirm):
+    fig, ax = plt.subplots(2, 1, figsize=(10, 8), constrained_layout=True)
+    
+    # 4日目のデータだけを抽出
+    altitudes, t_4th_day, u_bars_4th_day, theta_bars_4th_day, Ks_4th_day =  extract_4th_day(altitude, t, u_bars, theta_bars, Ks)
+
+    day = np.unique(t_4th_day).shape[0]
+    t_K = np.arange(0, 3600*(day-1), 0.1)
+    t_K_hour = t_K/3600
+    K_days = np.tile((Ks), int((day-1)/24) )
+
+    altitudes = reshape_array_for_scatter(altitudes)
+    #t_4th_day = reshape_array_for_scatter(t_4th_day)
+  
+    u_bars_4th_day = reshape_array_for_scatter(u_bars_4th_day)
+    theta_bars_4th_day = reshape_array_for_scatter(theta_bars_4th_day)
+
+    u_max_min =  get_max_min_info(t_4th_day, altitudes, u_bars_4th_day)
+    theta_max_min =  get_max_min_info(t_4th_day, altitudes, theta_bars_4th_day)
+
+    print("-----")
+    print("altitudes: ", altitudes.shape)
+    print("t_4th_day: ", t_4th_day.shape)
+    print("u_bars_4th_day: ", u_bars_4th_day.shape)
+    print("theta_bars_4th_day: ", theta_bars_4th_day.shape)
+    print("K: ", Ks_4th_day.shape)
+    print("-----")
+
+    print(f"u最大値: {u_max_min['max_value']}（t={u_max_min['t_at_max']}, altitude={u_max_min['altitude_at_max']}）")
+    print(f"u最小値: {u_max_min['min_value']}（t={u_max_min['t_at_min']}, altitude={u_max_min['altitude_at_min']}）")
+    print(f"theta最大値: {theta_max_min['max_value']}（t={theta_max_min['t_at_max']}, altitude={theta_max_min['altitude_at_max']}）")
+    print(f"theta最小値: {theta_max_min['min_value']}（t={theta_max_min['t_at_min']}, altitude={theta_max_min['altitude_at_min']}）")
+
+    fontsize_title = 20
+    fontsize_label = 16
+    fontsize_tick = 14
+    fontsize_colorbar = 18
+    linewidth = 2
+    
+    vmin = min(np.nanmin(u_bars_4th_day), np.nanmin(theta_bars_4th_day))
+    vmax = max(np.nanmax(u_bars_4th_day), np.nanmax(theta_bars_4th_day))
+    cmap = "bwr"
+    
+    sc0 = ax[0].scatter(t_4th_day, altitudes, c=u_bars_4th_day, cmap=cmap, s=20, marker="o", vmin=vmin, vmax=vmax)
+    sc1 = ax[1].scatter(t_4th_day, altitudes, c=theta_bars_4th_day, cmap=cmap, s=20, marker="o", vmin=vmin, vmax=vmax)
+
+    #plot Max,Min values
+    u_max_label = f"Max: {u_max_min['max_value']:.3g} m/s"
+    u_min_label = f"Min: {u_max_min['min_value']:.3g} m/s"
+    theta_max_label = f"Max: {theta_max_min['max_value']:.3g} K"
+    theta_min_label = f"Min: {theta_max_min['min_value']:.3g} K"
+    markersize=120
+
+    ax[0].scatter(u_max_min["t_at_max"], u_max_min["altitude_at_max"], s=markersize, marker="*", color="white", edgecolors="crimson", label=u_max_label)
+    ax[0].scatter(u_max_min["t_at_min"], u_max_min["altitude_at_min"], s=markersize, marker="*", color="white", edgecolors="navy", label=u_min_label)
+
+    ax[1].scatter(theta_max_min["t_at_max"], theta_max_min["altitude_at_max"], s=markersize, marker="*", color="white", edgecolors="darkred", label=theta_max_label)
+    ax[1].scatter(theta_max_min["t_at_min"], theta_max_min["altitude_at_min"], s=markersize, marker="*", color="white", edgecolors="darkblue", label=theta_min_label) 
+    
+    # カラーバー
+    cbar = fig.colorbar(sc1, ax=ax, orientation="vertical", fraction=0.02, pad=0.04)
+    #cbar.set_label("Color scale", fontsize=fontsize_colorbar)
+    cbar.ax.tick_params(labelsize=fontsize_tick)
+
+    days = np.arange(0, 25, 6)
+
+    for column in range(2):
+        twinx = ax[column].twinx()
+        twinx.plot(t_K_hour, K_days, color="black", alpha=0.7, linewidth=linewidth, label="K")
+        twinx.set_ylabel("K", fontsize=fontsize_label)
+        twinx.set_yticks(np.arange(0, 101, 20))
+        twinx.tick_params(axis='y', labelsize=fontsize_tick)
+        twinx.set_ylabel(r"K [m$^2$/s]", fontsize=fontsize_label)
+        twinx.legend(loc="upper right", fontsize=fontsize_tick)
+
+
+        # X軸
+        ax[column].set_xlabel('t [hour]', fontsize=fontsize_label)
+        ax[column].set_xticks(days)
+        ax[column].tick_params(axis='x', labelsize=fontsize_tick)
+        
+        # Y軸（左）
+        ax[column].set_ylabel('altitude [m]', fontsize=fontsize_label)
+        ax[column].tick_params(axis='y', labelsize=fontsize_tick)
+        
+        ax[column].grid()
+        ax[column].legend(loc="upper left", fontsize=fontsize_tick)
+        # タイトル
+        ax[0].set_title(r'$\overline{u}$', fontsize=fontsize_title)
+        ax[1].set_title(r"$\overline{\theta}$", fontsize=fontsize_title)
+    
+    base_name = os.path.basename(directory.rstrip('/'))
+    save_file_name = f"{directory}/{base_name}_4th_day_scatter.png"
+    if confirm==True:
+        plt.savefig(save_file_name, dpi=300)
+    else:
+        plt.show()
+    plt.close()
+
+
 #
 def scatter_plot_u_theta(directory, altitudes, ts, u_bars, theta_bars, Ks,  confirm):
 
@@ -185,43 +340,50 @@ def scatter_plot_u_theta(directory, altitudes, ts, u_bars, theta_bars, Ks,  conf
     t_K_hour = t_K/3600
 
     K_days = np.tile((Ks), int((day-1)/24) )
-    print(day, t_K_hour.shape, K_days.shape)
+    #print(day, t_K_hour.shape, K_days.shape)
     
     days = np.arange(0,day,24)
+    fig, ax = plt.subplots(2, 1, figsize=(10, 8), constrained_layout=True)
+    # カラーバーの追加
+    vmin = min(np.nanmin(u_bars), np.nanmin(theta_bars))
+    vmax = max(np.nanmax(u_bars), np.nanmax(theta_bars))
+    cmap = "bwr"
+    sc0 = ax[0].scatter(ts, altitudes, c=u_bars, cmap=cmap, s=5, marker="o")
+    sc1 = ax[1].scatter(ts, altitudes, c=theta_bars, cmap=cmap, s=5, marker="o")
+    cbar = fig.colorbar(sc1, ax=ax, orientation="vertical", fraction=0.02, pad=0.04)
+
+    for column in range(2):
+        twinx = ax[column].twinx()
+        twinx.scatter(t_K_hour, K_days, s=1,color="black", alpha=0.7, marker=".")
+    twinx.set_ylabel("K")
+    twinx.set_yticks(np.arange(0,101,20))
+    #labels and titles
+    #ax[0].scatter(t_K_hour, K_days)
+    ax[0].set_xlabel('t [hour]')
+    ax[0].set_xticks(days)
+    ax[0].set_ylabel('altitude [m]')
+    ax[0].set_title(r'$\overline{u}$')
+    ax[0].grid()
+    ax[1].set_xlabel('t [hour]')
+    ax[1].set_xticks(days)
+    ax[1].set_ylabel('altitude [m]')
+    ax[1].set_title(r"$\overline{\theta}$")
+    ax[1].grid()
+    base_name = os.path.basename(directory.rstrip('/'))
+    save_file_name = f"{directory}/{base_name}.png"
+        
+    #save_dir2 = ""
+    #save_file_name2 = f"{}/{base_name}.png"
     if confirm==True:
         print(altitudes.shape)
         print()
-        fig, ax = plt.subplots(2, 1, figsize=(10, 8), constrained_layout=True)
-        # カラーバーの追加
-        vmin = min(np.nanmin(u_bars), np.nanmin(theta_bars))
-        vmax = max(np.nanmax(u_bars), np.nanmax(theta_bars))
-        cmap = "bwr"
-        sc0 = ax[0].scatter(ts, altitudes, c=u_bars, cmap=cmap, s=5, marker="o")
-        sc1 = ax[1].scatter(ts, altitudes, c=theta_bars, cmap=cmap, s=5, marker="o")
-        cbar = fig.colorbar(sc1, ax=ax, orientation="vertical", fraction=0.02, pad=0.04)
-
-        for column in range(2):
-            twinx = ax[column].twinx()
-            twinx.scatter(t_K_hour, K_days, s=1,color="black", alpha=0.7, marker=".")
-            twinx.set_ylabel("K")
-            twinx.set_yticks(np.arange(0,101,20))
-        #labels and titles
-        #ax[0].scatter(t_K_hour, K_days)
-        ax[0].set_xlabel('t [hour]')
-        ax[0].set_xticks(days)
-        ax[0].set_ylabel('altitude [m]')
-        ax[0].set_title(r'$\overline{u}$')
-        ax[1].set_xlabel('t [hour]')
-        ax[1].set_xticks(days)
-        ax[1].set_ylabel('altitude [m]')
-        ax[1].set_title(r"$\overline{\theta}$")
-        base_name = os.path.basename(directory.rstrip('/'))
-        save_file_name = f"{directory}/{base_name}.png"
-        
-        #save_dir2 = ""
-        #save_file_name2 = f"{}/{base_name}.png"
         plt.savefig(save_file_name, dpi=300)
-        plt.close()
+
+    else:
+        
+        plt.show()
+        
+    plt.close()
 
 #temporal file for analytical plot
 def scatter_plot_u_theta_analytical(directory, altitudes, ts, u_bars, theta_bars,confirm):
@@ -334,6 +496,11 @@ def plot_u_theta(directory, altitude, t, u_bars, theta_bars, Ks, confirm):
         plt.savefig(save_file_name, dpi=300)
 
 
+
+
+
+        
+
 def load_datasets(directory):
     processor = NetCDFProcessor(directory)
     altitude, t, u_bars, theta_bars = processor.load_data()
@@ -349,7 +516,8 @@ def process_netcdf_directory(directory, confirm=False):
 def process_netcdf_directory_scatter(directory, confirm=True):
     processor = NetCDFProcessor(directory)
     altitude, t, u_bars, theta_bars, Ks = processor.load_data()
-    scatter_plot_u_theta(directory,altitude, t, u_bars, theta_bars, Ks, confirm)
+    #scatter_plot_u_theta(directory,altitude, t, u_bars, theta_bars, Ks, confirm)
+    plot_4th_day(directory, altitude, t, u_bars, theta_bars, Ks, confirm)
 
 def process_netcdf_directory_scatter_analytical(directory, confirm=True):
     processor = NetCDFProcessor(directory)
