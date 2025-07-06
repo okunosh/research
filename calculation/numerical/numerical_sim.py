@@ -17,19 +17,19 @@ def show_params(params):
     
 if __name__ == "__main__":
     # Parameters
-    num = 260
-    alpha_deg = 0.24 #0.48/2
+    num = 260#10
+    alpha_deg = 1.00 #0.48/2
     Theta = 100.
     K = None #to decide l_+ (height)
-    K_file = "K/AllDay_100.nc"#"K/Day100_night3.nc"#"K/testdata/test_num10_2.nc"#"K/AllDay_100.nc"#
-    surf_temp = "SurfTempF_sin.nc" #"TestGroundTheta0.nc"
+    K_file = "K/K_261.nc"
+    surf_temp = "surface_forcing/test_surface_forcing.nc"
 
     dt = 1.e-1
     #path
-    output_path = "output/validation_dn_before" #"output/results"
+    output_path = "output/results_v4_test" #"output/results"
     
     #Earth
-    
+    """
     params = {
         "num": num,
         "alpha_deg": alpha_deg,
@@ -46,6 +46,7 @@ if __name__ == "__main__":
     }
     """
     #Mars
+    
     params = {
         "num": num,
         "alpha_deg": alpha_deg,
@@ -53,15 +54,14 @@ if __name__ == "__main__":
         "K": K,
         "K_file":K_file,
         "g": 3.72,
-        "omega": 7.08e-5,  # 2*pi /88750
+        "omega":  2*np.pi /88750,
         "theta_0": 210.,
         "surface_temp": surf_temp,
-        "gamma": 4.02e-3,
+        "gamma": 1.e-4,
         "dt": dt,
         "output_path": output_path
     }
-    """
-    
+
     #show_params(params)
     #calculate
     sim = Simulation(params["g"],

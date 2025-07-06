@@ -77,8 +77,17 @@ class Simulation(WaveResolutions):
         self.dt = dt
         self.dn = 2* np.pi * self.l_plus / self.num
         self.mat_num = self.num+1
+
+        #temporal and spatial gamma
+        self.gamma_file = "test_spaciotmp_gamma.nc"
+        ds_gamma = xr.open_dataset(self.gamma_file)
+        self.gamma_zt = ds_gamma["gamma"].values.T
+        #-----------------
+        
+        ##will be changed!
         self.B = self.dt * self.N**2 * np.sin(self.alpha) / self.gamma
         self.C = -self.dt * self.gamma * np.sin(self.alpha)
+        #-----------------
 
         self.w= self.make_w_init()
         #self.matrix = self.make_block_matrix() #change!
@@ -96,17 +105,18 @@ class Simulation(WaveResolutions):
         return np.zeros((self.mat_num)*2).reshape((self.mat_num)*2,1)
 
     #block matrix
-    """
     def updateK(self, K): #K: raw vector whose length is equal to self.mat_num
         coeff = self.dt *  self.num**2 * self.omega_plus / 8/ np.pi**2
         E = np.ones_like(K)
         A = np.ones_like(K)*coeff
         AA = E - 2*A
         return A, AA
-    """
-    def make_off_diagonal(self, val):
-        a = np.diag([val]*self.mat_num)
+    
+    def make_off_diagonal(self, vec):
+        #a = np.diag([val]*self.mat_num)
+        a = np.array(np.diag(vec))
         a[0,0], a[self.mat_num-1, self.mat_num-1] = 0, 0
+        #print(a)
         return a
 
     def make_1_1(self, A, AA):
@@ -124,11 +134,11 @@ class Simulation(WaveResolutions):
         a[1,0] = A[1]
         return a
 
-    def update_block_matrix(self, KK):
+    def update_block_matrix(self, KK, B, C):
         A, AA = self.updateK(KK)
         a = self.make_1_1(A, AA)
-        b = self.make_off_diagonal(self.B)
-        c = self.make_off_diagonal(self.C)
+        b = self.make_off_diagonal(B)
+        c = self.make_off_diagonal(C)
         d = self.make_2_2(A, AA)
         
         block_matrix = np.block([
@@ -160,11 +170,34 @@ class Simulation(WaveResolutions):
             self.l_minus = np.sqrt(2 * self.K / self.omega_minus)
             self.n = np.linspace(0, 2.*np.pi*self.l_plus, self.num+1)
 
-            matrix = self.update_block_matrix(K_)
+            #gamma
+            gamma_profile = self.gamma_zt[:, num]
+            gamma_profile = np.clip(gamma_profile, 1e-4, None)
+            N = np.sqrt((self.g / self.theta_0) * gamma_profile)
+            B = self.dt * N**2 * np.sin(self.alpha)/gamma_profile
+            C = -self.dt * gamma_profile * np.sin(self.alpha)
+
+            matrix = self.update_block_matrix(K_, B ,C)
             self.dn =  2* np.pi * self.l_plus / self.num
             self.w = matrix @ self.w
             self.w[self.num+1] = surface_theta[num]
-                
+
+            
+            print("gamma_profile: ", gamma_profile,
+                  gamma_profile.shape,
+                  np.max(gamma_profile),
+                  np.min(gamma_profile)
+            )
+            print("self.N: ", self.N)
+            print("N: ", N)
+            print("B: ", B)
+            print("self.B: ", self.B)
+            print("C: ", C)
+            print("self.C :", self.C)
+            input("stop")
+            print("-----")
+            
+             
             if t%3600 == 0:
                 #update parameters
                 self.time = t
@@ -179,5 +212,5 @@ class Simulation(WaveResolutions):
                     #condition manager!
                 data.save_to_netcdf(new_dir_path)
                 #print("finished:"+str(t), datetime.now().time())
-        process_netcdf_directory_scatter(new_dir_path)
+        process_netcdf_directory_scatter(new_dir_path, confirm=True, save=True)
         #print(datetime.now().time())
