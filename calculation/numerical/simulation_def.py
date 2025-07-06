@@ -79,9 +79,9 @@ class Simulation(WaveResolutions):
         self.mat_num = self.num+1
 
         #temporal and spatial gamma
-        self.gamma_file = "test_spaciotmp_gamma.nc"
+        self.gamma_file = "gamma/gamma_const_4.020e-03.nc"
         ds_gamma = xr.open_dataset(self.gamma_file)
-        self.gamma_zt = ds_gamma["gamma"].values.T
+        self.gamma_zt = ds_gamma["gamma"].values
         #-----------------
         
         ##will be changed!
@@ -182,7 +182,7 @@ class Simulation(WaveResolutions):
             self.w = matrix @ self.w
             self.w[self.num+1] = surface_theta[num]
 
-            
+            """
             print("gamma_profile: ", gamma_profile,
                   gamma_profile.shape,
                   np.max(gamma_profile),
@@ -194,9 +194,9 @@ class Simulation(WaveResolutions):
             print("self.B: ", self.B)
             print("C: ", C)
             print("self.C :", self.C)
-            input("stop")
+            #input("stop")
             print("-----")
-            
+            """
              
             if t%3600 == 0:
                 #update parameters
