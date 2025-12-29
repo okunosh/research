@@ -1,0 +1,278 @@
+"""
+make_surface_forcing_and_K_from_MCD.py
+
+MCD からダウンロードした ASCII テキストデータを入力として、
+
+1. surface forcing（theta_surf）の NetCDF + 図 を生成
+2. それと位相同期した拡散係数 K(z,t) の NetCDF + 図 を生成
+
+までを一括で行う。
+
+依存:
+- make_surface_forcing_from_MCD.py
+    - generate_surface_forcing_from_mcd(...)
+- make_K_from_surface_forcing_MCD.py
+    - generate_K_from_surface_forcing_MCD(...)
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Optional
+import argparse
+
+from make_surface_forcing_from_MCD import generate_surface_forcing_from_mcd
+from make_K_from_surface_forcing_MCD import generate_K_from_surface_forcing_MCD
+
+
+# ============================================================
+# 内部ユーティリティ
+# ============================================================
+
+
+def _build_method_suffix(interp_method: str, n_harmonics: int) -> str:
+    """
+    補間方法とフーリエ次数からファイル名用の suffix を作成する。
+
+    - fourier: "_fourierN<n_harmonics>"
+    - linear : "_linear"
+    - その他 : "_<interp_method>"
+    """
+    method = interp_method.lower()
+    if method == "fourier":
+        if n_harmonics <= 0:
+            raise ValueError("interp_method='fourier' のとき n_harmonics は 1 以上である必要があります。")
+        return f"_fourierN{n_harmonics}"
+    elif method == "linear":
+        return "_linear"
+    else:
+        return f"_{method}"
+
+
+# ============================================================
+# コア処理
+# ============================================================
+
+
+def generate_surface_forcing_and_K_from_MCD(
+    mcd_txt_path: str | Path,
+    *,
+    interp_method: str = "fourier",
+    n_harmonics: int = 6,
+    dt: float = 0.1,
+    sol_sec: float = 86400.0,
+    nz: int,
+    K_min: float,
+    K_max: float,
+    shape_power: float = 1.0,
+    surface_dir: str | Path = "surface_forcing_from_MCD",
+    K_dir: str | Path = "K_MCD",
+    surface_var_name: str = "theta_surf",
+    K_var_name: str = "K",
+) -> None:
+    """
+    MCD テキストから surface forcing と K(z,t) を一括生成するラッパー。
+
+    Parameters
+    ----------
+    mcd_txt_path : str or Path
+        MCD ASCII テキストファイルへのパス (例: MCDdata/Ls90_Lat0_Long260_Alt0.txt)
+    interp_method : {"fourier", "linear"}, default "fourier"
+        温度強制の補間方法
+    n_harmonics : int, default 6
+        interp_method="fourier" のときに用いるフーリエ次数
+    dt : float, default 0.1
+        出力 NetCDF の time 軸の時間刻み [s]
+    sol_sec : float, default 86400.0
+        1 sol の秒数
+    nz : int
+        高度方向の格子点数
+    K_min, K_max : float
+        拡散係数 K(t) の最小・最大値 [m^2/s]
+    shape_power : float, default 1.0
+        θ̄(0,t) 正規化値から K への写像で用いるべき指数 p
+    surface_dir : str or Path, default "surface_forcing_from_MCD"
+        surface forcing NetCDF/図の保存ディレクトリ
+    K_dir : str or Path, default "K_MCD"
+        K NetCDF/図の保存ディレクトリ
+    surface_var_name : str, default "theta_surf"
+        surface forcing NetCDF 内の変数名（現状は "theta_surf" 固定想定）
+    K_var_name : str, default "K"
+        K NetCDF 内の変数名
+    """
+    mcd_txt_path = Path(mcd_txt_path)
+    if not mcd_txt_path.is_file():
+        raise FileNotFoundError(f"MCD テキストファイルが見つかりません: {mcd_txt_path}")
+
+    if nz <= 0:
+        raise ValueError("nz は 1 以上の整数である必要があります。")
+
+    if shape_power <= 0.0:
+        raise ValueError("shape_power は 0 より大きい値である必要があります。")
+
+    stem = mcd_txt_path.stem  # 例: "Ls90_Lat0_Long260_Alt0"
+    method_suffix = _build_method_suffix(interp_method, n_harmonics)
+
+    surface_dir = Path(surface_dir)
+    K_dir = Path(K_dir)
+
+    # === 1. surface forcing のパス決定 ===
+    surface_nc_path = surface_dir / f"{stem}{method_suffix}.nc"
+    surface_fig_path = surface_dir / f"{stem}{method_suffix}_theta_anomaly.png"
+
+    # === 2. surface forcing の生成 ===
+    # ここでは make_surface_forcing_from_MCD.py 側のデフォルト変数名を利用する
+    generate_surface_forcing_from_mcd(
+        mcd_txt_path=mcd_txt_path,
+        output_nc_path=surface_nc_path,
+        output_png_path=surface_fig_path,
+        interp_method=interp_method,
+        n_harmonics=n_harmonics,
+        dt=dt,
+        sol_sec=sol_sec,
+        # var_name は "theta_surf" のデフォルトに任せる
+    )
+
+    # === 3. K(z,t) のパス決定 ===
+    K_nc_path = K_dir / f"{stem}{method_suffix}.nc"
+    K_fig_path = K_dir / f"{stem}{method_suffix}_K_theta.png"
+
+    # === 4. K(z,t) の生成 ===
+    generate_K_from_surface_forcing_MCD(
+        surface_nc_path=surface_nc_path,
+        output_nc_path=K_nc_path,
+        output_png_path=K_fig_path,
+        nz=nz,
+        K_min=K_min,
+        K_max=K_max,
+        shape_power=shape_power,
+        # theta_var_name / K_var_name / sol_sec はデフォルトを利用
+        sol_sec=sol_sec,
+    )
+
+
+# ============================================================
+# CLI インターフェース
+# ============================================================
+
+
+def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=(
+            "MCD テキストから surface forcing (theta_surf) と "
+            "位相同期した拡散係数 K(z,t) を一括生成するスクリプト"
+        )
+    )
+
+    parser.add_argument(
+        "mcd_txt",
+        help="入力となる MCD ASCII テキストファイルのパス "
+             "(例: MCDdata/Ls90_Lat0_Long260_Alt0.txt)",
+    )
+
+    # forcing 関連
+    parser.add_argument(
+        "--interp-method",
+        type=str,
+        default="fourier",
+        choices=["fourier", "linear"],
+        help="温度強制の補間方法 (fourier or linear) [default: fourier]",
+    )
+    parser.add_argument(
+        "--n-harmonics",
+        type=int,
+        default=6,
+        help="interp-method=fourier のときのフーリエ次数 N [default: 6]",
+    )
+    parser.add_argument(
+        "--dt",
+        type=float,
+        default=0.1,
+        help="forcing NetCDF の time 軸の時間刻み [s] [default: 0.1]",
+    )
+    parser.add_argument(
+        "--sol-sec",
+        type=float,
+        default=86400.0,
+        help="1 sol の秒数 [default: 86400.0]",
+    )
+
+    # K 関連
+    parser.add_argument(
+        "--nz",
+        type=int,
+        required=True,
+        help="K(z,t) の高度方向格子点数 nz（必須）",
+    )
+    parser.add_argument(
+        "--K-min",
+        type=float,
+        required=True,
+        help="拡散係数 K の最小値 [m^2/s]（必須）",
+    )
+    parser.add_argument(
+        "--K-max",
+        type=float,
+        required=True,
+        help="拡散係数 K の最大値 [m^2/s]（必須）",
+    )
+    parser.add_argument(
+        "--shape-power",
+        type=float,
+        default=1.0,
+        help="θ̄(0,t) 正規化値から K への写像で用いる指数 p [default: 1.0]",
+    )
+
+    # 出力ディレクトリ
+    parser.add_argument(
+        "--surface-dir",
+        type=str,
+        default="surface_forcing_from_MCD",
+        help="surface forcing の出力ディレクトリ [default: surface_forcing_from_MCD]",
+    )
+    parser.add_argument(
+        "--K-dir",
+        type=str,
+        default="K_MCD",
+        help="K の出力ディレクトリ [default: K_MCD]",
+    )
+
+    # 変数名（ほぼ触らない想定）
+    parser.add_argument(
+        "--surface-var-name",
+        type=str,
+        default="theta_surf",
+        help="forcing NetCDF 内の変数名 [default: theta_surf]（現状あまり変更不要）",
+    )
+    parser.add_argument(
+        "--K-var-name",
+        type=str,
+        default="K",
+        help="K NetCDF 内の変数名 [default: K]",
+    )
+
+    return parser.parse_args(argv)
+
+
+def main(argv: Optional[list[str]] = None) -> None:
+    args = _parse_args(argv)
+
+    generate_surface_forcing_and_K_from_MCD(
+        mcd_txt_path=args.mcd_txt,
+        interp_method=args.interp_method,
+        n_harmonics=args.n_harmonics,
+        dt=args.dt,
+        sol_sec=args.sol_sec,
+        nz=args.nz,
+        K_min=args.K_min,
+        K_max=args.K_max,
+        shape_power=args.shape_power,
+        surface_dir=args.surface_dir,
+        K_dir=args.K_dir,
+        surface_var_name=args.surface_var_name,
+        K_var_name=args.K_var_name,
+    )
+
+
+if __name__ == "__main__":
+    main()

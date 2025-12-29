@@ -1,0 +1,345 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""
+make_K_from_surface_forcing_parametric.py
+
+make_surface_forcing_parametric.py が出力した NetCDF
+（地表温位偏差 theta_0(time)）を読み込み、
+それと位相同期した拡散係数 K(altitude, time) を生成して
+NetCDF + PNG を保存するスクリプト。
+
+- 入力: surface_forcing_parametric/.../*.nc
+- 出力: K_parametric/{case_name}/{同じファイル名}.nc
+        K_parametric/{case_name}/{同じベース名}.png
+"""
+
+import os
+from datetime import datetime
+
+import numpy as np
+import xarray as xr
+import matplotlib.pyplot as plt
+import argparse
+
+
+# ======================================================================
+# 1. ユーザーが編集するパラメータ
+# ======================================================================
+
+# 入力: surface_forcing_parametric の NetCDF ファイル
+INPUT_FORCING_NC = (
+    "surface_forcing_parametric/lat-30.0_Ls90.0/215.0_40.0_0.0.nc"
+)
+
+# K を出力するルートディレクトリ
+K_OUTPUT_ROOT = "K_parametric"
+
+# 高度方向の格子点数（altitude 次元の長さ）
+SPACE_RES = 260 + 1  # 0〜780 m を 1 m 刻みとみなす
+
+# K のレンジ [m^2/s]
+K_MIN = 3.0
+K_MAX = 100.0
+
+# 「基準系」での夜間の定義 [hour]
+# tau = (LT - phase_shift_hours) mod 24 上で
+# tau < NIGHT_EARLY_END もしくは tau >= NIGHT_LATE_START を夜とみなす
+NIGHT_EARLY_END = 5.0   # 0〜5 LT
+NIGHT_LATE_START = 22.0 # 22〜24 LT
+
+
+# ======================================================================
+# 2. K(t) を作るヘルパー関数
+# ======================================================================
+
+def build_K_from_forcing(forcing_ds,
+                         k_min=K_MIN,
+                         k_max=K_MAX,
+                         night_early_end=NIGHT_EARLY_END,
+                         night_late_start=NIGHT_LATE_START):
+    """
+    surface_forcing_parametric の Dataset から K(t) を構築する。
+
+    Parameters
+    ----------
+    forcing_ds : xarray.Dataset
+        make_surface_forcing_parametric.py の出力 NetCDF を open したもの
+    k_min, k_max : float
+        K の最小・最大値
+    night_early_end : float
+        基準系での夜終端時刻 [hour] （tau < night_early_end が夜）
+    night_late_start : float
+        基準系での夜再開始時刻 [hour] （tau >= night_late_start が夜）
+
+    Returns
+    -------
+    t_sec : ndarray, shape (ntime,)
+        時刻 [s]
+    K_1d : ndarray, shape (ntime,)
+        時間依存の拡散係数 K(t)
+    """
+    if "theta_0" not in forcing_ds:
+        raise KeyError("Input Dataset does not contain 'theta_0'.")
+
+    theta_anom = forcing_ds["theta_0"].values
+    t_sec = forcing_ds["time"].values.astype(float)
+    t_hour = t_sec / 3600.0
+
+    # 位相シフト Δt [hour] （存在しなければ 0 とみなす）
+    phase_shift = float(forcing_ds.attrs.get("phase_shift_hours", 0.0))
+
+    # 基準系の局地時刻 tau (= LT - Δt)
+    tau = (t_hour - phase_shift) % 24.0
+
+    # θ'(t) の min/max から正規化
+    theta_min = float(np.min(theta_anom))
+    theta_max = float(np.max(theta_anom))
+    dtheta = theta_max - theta_min
+
+    if dtheta < 1.0e-6:
+        # ほぼ一定なら K_min でフラット
+        K_1d = np.full_like(t_sec, k_min, dtype=np.float32)
+        return t_sec, K_1d
+
+    norm = (theta_anom - theta_min) / dtheta  # 0〜1
+    norm = np.clip(norm, 0.0, 1.0)
+
+    # K_base(t): theta' が大きいほど K が大きい
+    K_base = k_min + norm * (k_max - k_min)
+
+    # 夜間マスク（基準系の tau で決める）
+    night_mask = (tau < night_early_end) | (tau >= night_late_start)
+
+    K_1d = K_base.astype(np.float32)
+    K_1d[night_mask] = k_min
+
+    return t_sec, K_1d
+
+
+# ======================================================================
+# 3. NetCDF Dataset を組み立てて保存
+# ======================================================================
+
+def make_K_dataset(forcing_ds, t_sec, K_1d,
+                   space_res=SPACE_RES,
+                   k_min=K_MIN, k_max=K_MAX,
+                   night_early_end=NIGHT_EARLY_END,
+                   night_late_start=NIGHT_LATE_START):
+    """
+    surface_forcing の Dataset と K(t) から K(altitude, time) の Dataset を作る。
+
+    Parameters
+    ----------
+    forcing_ds : xarray.Dataset
+        surface_forcing_parametric の Dataset
+    t_sec : ndarray, shape (ntime,)
+        時刻 [s]
+    K_1d : ndarray, shape (ntime,)
+        時間依存の K(t)
+    space_res : int
+        altitude 次元の長さ
+    k_min, k_max : float
+        K の最小・最大値（属性用）
+    night_early_end, night_late_start : float
+        夜間定義の基準系 LT [hour]
+
+    Returns
+    -------
+    ds_K : xarray.Dataset
+        K(altitude, time) の Dataset
+    """
+    t_sec = np.asarray(t_sec, dtype=float)
+    K_1d = np.asarray(K_1d, dtype=np.float32)
+
+    if K_1d.shape[0] != t_sec.shape[0]:
+        raise ValueError(
+            f"K_1d and time must have same length, got {K_1d.shape[0]} and {t_sec.shape[0]}"
+        )
+
+    # 高度方向に一様な K を複製
+    altitude = np.arange(space_res, dtype=float)
+    K_2d = np.tile(K_1d, (space_res, 1))
+
+    data_vars = {
+        "K": (
+            ("altitude", "time"),
+            K_2d,
+            {
+                "unit": "m^2/s",
+                "description": "turbulent diffusivity, uniform in altitude",
+            },
+        )
+    }
+
+    coords = {
+        "altitude": (
+            "altitude",
+            altitude,
+            {
+                "unit": "meters",
+                "description": "height above ground (model index; 1 m spacing assumed)",
+            },
+        ),
+        "time": (
+            "time",
+            t_sec,
+            {
+                "unit": "seconds",
+                "description": "time from local midnight",
+            },
+        ),
+    }
+
+    # surface_forcing 側の属性をコピーしてから K 用の情報を追加
+    attrs = dict(forcing_ds.attrs)
+    attrs.update(
+        {
+            "history": "Created on %s from surface forcing file"
+            % datetime.now().isoformat(),
+            "source_surface_forcing": getattr(
+                forcing_ds, "__source_path__", "unknown"
+            ),
+            "K_min": float(k_min),
+            "K_max": float(k_max),
+            "altitude_points": int(space_res),
+            "night_start_hour_base": float(0.0),
+            "night_early_end_hour_base": float(night_early_end),
+            "night_late_start_hour_base": float(night_late_start),
+            "night_definition": (
+                "night defined in phase coordinate "
+                "tau = (LT - phase_shift_hours) mod 24; "
+                f"tau < {night_early_end} or tau >= {night_late_start}"
+            ),
+        }
+    )
+
+    ds_K = xr.Dataset(data_vars=data_vars, coords=coords, attrs=attrs)
+    return ds_K
+
+
+def save_K_netcdf_and_png(ds_K, output_root, input_nc_path):
+    """
+    K Dataset を NetCDF と PNG として保存する。
+
+    - 出力 NetCDF: {output_root}/{case_name}/{ベースファイル名}.nc
+    - 出力 PNG  : 同じディレクトリ・同じベース名の .png
+
+    Parameters
+    ----------
+    ds_K : xarray.Dataset
+        K の Dataset
+    output_root : str
+        出力ルートディレクトリ
+    input_nc_path : str
+        入力 surface forcing NetCDF のパス（ベース名取得用）
+
+    Returns
+    -------
+    output_nc : str
+        保存した NetCDF のパス
+    output_png : str
+        保存した PNG のパス
+    """
+    case_name = ds_K.attrs.get("case_name", "case_unknown")
+
+    base_name = os.path.basename(input_nc_path)
+
+    out_dir = os.path.join(output_root, case_name)
+    os.makedirs(out_dir, exist_ok=True)
+
+    output_nc = os.path.join(out_dir, base_name)
+    ds_K.to_netcdf(output_nc)
+
+    base_no_ext, _ = os.path.splitext(base_name)
+    output_png = os.path.join(out_dir, base_no_ext + ".png")
+
+    # K(t) を 1 本プロット（高度0の列）
+    t_sec = ds_K["time"].values
+    t_hour = t_sec.astype(float) / 3600.0
+    K_1d = ds_K["K"].values[0, :]  # 高度一様なので altitude=0 を代表として使う
+
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ax.plot(t_hour, K_1d)
+    ax.set_xlabel("Local time [hour]")
+    ax.set_ylabel("Turbulent diffusivity K [m^2/s]")
+    ax.set_title("K(t) from surface forcing case: %s" % case_name)
+
+    ax.set_xticks(np.arange(0.0, 25.0, 6.0))
+    ax.grid(True, linestyle="--", alpha=0.5)
+
+    fig.tight_layout()
+    fig.savefig(output_png, dpi=300)
+    plt.close(fig)
+
+    return output_nc, output_png
+
+
+# ======================================================================
+# 4. メイン処理
+# ======================================================================
+
+def main(debug=False):
+    # 入力 surface forcing を読み込み
+    forcing_ds = xr.open_dataset(INPUT_FORCING_NC)
+    forcing_ds.__source_path__ = os.path.abspath(INPUT_FORCING_NC)
+
+    # K(t) を構築
+    t_sec, K_1d = build_K_from_forcing(forcing_ds)
+
+    # Dataset 作成
+    ds_K = make_K_dataset(
+        forcing_ds,
+        t_sec,
+        K_1d,
+        space_res=SPACE_RES,
+        k_min=K_MIN,
+        k_max=K_MAX,
+        night_early_end=NIGHT_EARLY_END,
+        night_late_start=NIGHT_LATE_START,
+    )
+
+    # 保存
+    output_nc, output_png = save_K_netcdf_and_png(
+        ds_K,
+        output_root=K_OUTPUT_ROOT,
+        input_nc_path=INPUT_FORCING_NC,
+    )
+
+    if debug:
+        print("=== DEBUG: K-generation from surface forcing ===")
+        print("  INPUT_FORCING_NC   :", os.path.abspath(INPUT_FORCING_NC))
+        print("  K_OUTPUT_ROOT      :", os.path.abspath(K_OUTPUT_ROOT))
+        print("  CASE_NAME(attr)    :", ds_K.attrs.get("case_name", "None"))
+        print("  LAT [deg]          :", ds_K.attrs.get("latitude_deg", "None"))
+        print("  Ls  [deg]          :", ds_K.attrs.get("solar_longitude_deg", "None"))
+        print("  theta0_surface_mean:", ds_K.attrs.get("theta0_surface_mean", "None"))
+        print("  theta0_offset      :", ds_K.attrs.get("theta0_offset", "None"))
+        print("  dtheta_amp         :", ds_K.attrs.get("dtheta_amp", "None"))
+        print("  phase_shift_hours  :", ds_K.attrs.get("phase_shift_hours", "None"))
+        print("  SPACE_RES          :", SPACE_RES)
+        print("  K_MIN, K_MAX       :", K_MIN, K_MAX)
+        print("  NIGHT_EARLY_END    :", NIGHT_EARLY_END)
+        print("  NIGHT_LATE_START   :", NIGHT_LATE_START)
+        print("  output_nc          :", output_nc)
+        print("  output_png         :", output_png)
+        print("  K(t) stats         : min=%.3f, max=%.3f" %
+              (float(np.min(K_1d)), float(np.max(K_1d))))
+        print("  time steps         :", t_sec.shape[0])
+
+
+# ======================================================================
+# 5. エントリーポイント（--debug のみ）
+# ======================================================================
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="Generate time-dependent diffusivity K(t) in phase with "
+                    "surface forcing (theta_0) from a NetCDF file."
+    )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Print parameters and output paths / K stats."
+    )
+    args = parser.parse_args()
+    main(debug=args.debug)

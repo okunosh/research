@@ -1,0 +1,26 @@
+import numpy as np
+
+KAPPA = 0.25 #R_d/C_p
+p_bottom = 6 #hPa
+
+def theta(T,p):
+    return T*(p_bottom/p)**KAPPA
+
+def calc_dtheta_dz(theta_bottom, theta_top):
+    delta_z = 20000 #m
+
+    return (theta_top - theta_bottom) / delta_z
+
+p_top = 1 #hPa
+
+T_bottom = 242
+T_top = 200
+
+theta_bottom = theta(T_bottom, p_bottom)
+theta_top = theta(T_top, p_top)
+
+dtheta_dz = calc_dtheta_dz(theta_bottom, theta_top)
+print('-----')
+print("theta_top [K]: {:.3f}".format(theta_top))
+print("theta_bottom [K]: {:.3f}".format(theta_bottom))
+print("dtheta_dz [K/m]: {:e}".format(dtheta_dz))

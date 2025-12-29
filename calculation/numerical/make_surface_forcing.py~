@@ -1,0 +1,111 @@
+import numpy as np
+import xarray as xr
+from scipy.optimize import curve_fit
+from datetime import datetime 
+import matplotlib.pyplot as plt
+
+
+def GroundTempModel():
+    T = np.array([
+    184, 183, 181, 178.5, 177, 174,
+    161.1, 192, 219, 234, 248, 259,
+    260, 261, 258.5, 252, 240, 225,
+    210, 198, 193, 190, 189, 186
+    ])
+    return T
+
+
+# フーリエ級数（N=5）モデル
+def fourier_series_N5(t, *a):
+    result = a[0]
+    for n in range(1, 6):
+        result += a[2*n-1] * np.cos(2*np.pi*n*t/86400) + a[2*n] * np.sin(2*np.pi*n*t/86400)
+    return result
+
+def make_theta_fit(T):
+    # 時間配列（秒単位, 0時〜23時まで1時間刻み）
+    t = np.arange(24) * 3600  # 単位：秒
+    # 温位偏差：平均を引く
+    theta_0 = T - np.mean(T)
+    # フィット初期推定値
+    initial_guess = [0] + [0.1] * 10
+    # フィッティング実行
+    params, _ = curve_fit(fourier_series_N5, t, theta_0, p0=initial_guess)
+    # 高分解能時間軸（0.1秒刻み）
+    t_highers = np.linspace(0, 86400, 864000, endpoint=False)
+    
+    # フィッティング結果（温位偏差）
+    theta_fit = fourier_series_N5(t_highers, *params)
+
+    return t_highers, theta_fit
+
+def makeDataset(t, new_T_fitted):
+    tar = np.arange(0, 24*3600, 0.1)
+    data_vars = {
+        "theta_0": ("time",
+                    new_T_fitted,
+                    {"unit":"kelvin",
+                     "description":"surface temperature oscillation"
+                     })
+    }
+    coords = {
+        "time": ("time",
+                 tar,
+                 {"unit": "seconds"
+                  }),
+    }
+    attrs = {
+        "history":f"Created on {datetime.now().isoformat()}",
+        "reference": "Martinez et al. (20117), DOI: 10.1007/s11214-017-0360-x"
+    }
+
+    ds = xr.Dataset(data_vars = data_vars, coords=coords, attrs=attrs)
+    return ds
+
+def saveToNetcdf(ds, output, save=False):
+    if save == True:
+        ds.to_netcdf(output)
+    else:
+        print(ds)
+
+def make_boundary(output, save):
+    T = GroundTempModel()
+    t, coeff, T_fitted = AnomalyFromBasic(T)
+    newt, new_T_fitted = interp_fittedT(t, coeff,  T_fitted)
+    ds = makeDataset(newt, new_T_fitted)
+    saveToNetcdf(ds, output, save)
+    return ds
+
+def make_boundary_condition(output, save):
+    T = GroundTempModel()
+    t, fitted_theta = make_theta_fit(T)
+    ds = makeDataset(t, fitted_theta)
+    saveToNetcdf(ds, output, save)
+    return ds
+    
+    
+if __name__ == "__main__":
+
+    dirname = "surface_forcing/"
+    f_name = "test_surface_forcing"
+
+    output = dirname + f_name + ".nc"
+    output_png = dirname + f_name + ".png"
+    save = True
+    make_boundary_condition(output, save)
+
+    ds0 = xr.open_dataset(output)
+    t_highers = ds0.time.values
+    theta_fit = ds0.theta_0.values
+
+    plt.figure(figsize=(12, 6))
+    plt.plot(t_highers / 3600, theta_fit, label='Temperature deviation (θ)', color='blue')
+    plt.xlabel('Time [hours]')
+    plt.xticks(np.arange(0, 25, 6))
+    plt.ylabel('theta anomaly')
+    plt.title('surface forcing')
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(output_png, dpi=300)
+    plt.show()

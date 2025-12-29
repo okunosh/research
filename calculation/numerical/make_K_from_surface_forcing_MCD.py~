@@ -1,0 +1,373 @@
+"""
+make_K_from_surface_forcing_MCD.py
+
+MCD から作成した surface forcing (theta_surf) の NetCDF を入力として，
+位相同期した乱流拡散係数 K(z, t) を作成するスクリプト／モジュール。
+
+- 入力:  surface_forcing_from_MCD/ にある theta_surf(time) を含む NetCDF
+- 出力:  K_MCD/ 以下に K(z, t) を保存した NetCDF
+         併せて θ̄(0,t) と地表面 K の日変化を比較する図を保存
+
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Optional
+
+import numpy as np
+import xarray as xr
+import matplotlib.pyplot as plt
+import argparse
+
+
+# ============================================================
+# コア計算部分
+# ============================================================
+
+
+def create_K_dataset_from_surface_forcing(
+    ds_theta: xr.Dataset,
+    nz: int,
+    K_min: float,
+    K_max: float,
+    shape_power: float = 1.0,
+    *,
+    theta_var_name: str = "theta_surf",
+    K_var_name: str = "K",
+    sol_sec: float = 86400.0,
+) -> xr.Dataset:
+    """
+    surface forcing Dataset (theta_surf(time)) から K(z, t) の Dataset を作成する。
+
+    Parameters
+    ----------
+    ds_theta : xr.Dataset
+        theta_surf(time) を含む Dataset。
+    nz : int
+        高度方向の格子点数。K をこの数だけ高さ方向にコピーする。
+    K_min, K_max : float
+        K(t) の最小値・最大値 [m^2/s]。
+    shape_power : float, default 1.0
+        theta_surf の正規化値を K に写像する際のべき指数。
+        1.0 なら線形，>1 で昼間を強調，<1 で昼夜の差を弱める。
+    theta_var_name : str, default "theta_surf"
+        surface forcing の変数名。
+    K_var_name : str, default "K"
+        出力 Dataset 中の拡散係数の変数名。
+    sol_sec : float, default 86400.0
+        1 日 (=1 sol) の秒数。プロット時の地方時変換にも使う。
+
+    Returns
+    -------
+    ds_K : xr.Dataset
+        dims: (z, time) を持つ K(z, t) の Dataset。
+    """
+    if theta_var_name not in ds_theta:
+        raise KeyError(f"入力 Dataset に変数 '{theta_var_name}' が見つかりません。")
+
+    if "time" not in ds_theta.coords:
+        raise KeyError("入力 Dataset に 'time' 座標が見つかりません。")
+
+    if nz <= 0:
+        raise ValueError("nz は 1 以上の整数である必要があります。")
+
+    if shape_power <= 0.0:
+        raise ValueError("shape_power は 0 より大きい値である必要があります。")
+
+    time_sec = ds_theta["time"].to_numpy()
+    theta = ds_theta[theta_var_name].to_numpy().astype(float)
+
+    # θ̄(0,t) の平均値を取得（属性にあればそれを使う）
+    mean_key = f"{theta_var_name}_mean"
+    if mean_key in ds_theta.attrs:
+        theta_mean = float(ds_theta.attrs[mean_key])
+    else:
+        theta_mean = float(theta.mean())
+
+    theta_prime = theta - theta_mean
+
+    th_min = float(theta_prime.min())
+    th_max = float(theta_prime.max())
+
+    if th_max - th_min <= 0.0:
+        # 変化が無い場合は一律 K_min
+        s = np.zeros_like(theta_prime)
+    else:
+        s = (theta_prime - th_min) / (th_max - th_min)
+
+    # 形状調整
+    s_shaped = s ** shape_power
+
+    # K(t) の計算
+    K_surface = K_min + (K_max - K_min) * s_shaped  # shape: (nt,)
+
+    # 高度方向にコピーして K(z, t) を作成
+    nt = K_surface.size
+    K_2d = np.broadcast_to(K_surface, (nz, nt))
+
+    z_index = np.arange(nz, dtype=int)
+
+    ds_K = xr.Dataset(
+        coords={
+            "z": ("z", z_index),
+            "time": ("time", time_sec),
+        },
+        data_vars={
+            K_var_name: (("z", "time"), K_2d.astype(np.float64)),
+        },
+        attrs={
+            "K_min": float(K_min),
+            "K_max": float(K_max),
+            "shape_power": float(shape_power),
+            "sol_sec": float(sol_sec),
+        },
+    )
+    ds_K[K_var_name].attrs["long_name"] = "turbulent diffusivity"
+    ds_K[K_var_name].attrs["units"] = "m2 s-1"
+
+    # surface forcing 側のメタデータも少し引き継いでおく
+    if mean_key in ds_theta.attrs:
+        ds_K.attrs[mean_key] = ds_theta.attrs[mean_key]
+    if "description" in ds_theta.attrs:
+        ds_K.attrs["surface_forcing_description"] = ds_theta.attrs["description"]
+
+    return ds_K
+
+
+# ============================================================
+# 保存・プロット
+# ============================================================
+
+
+def save_K_dataset(ds_K: xr.Dataset, output_nc_path: str | Path) -> None:
+    """K(z, t) の Dataset を NetCDF として保存する。"""
+    out_path = Path(output_nc_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    ds_K.to_netcdf(out_path)
+    print(f"[INFO] Wrote K dataset to: {out_path}")
+
+
+def plot_K_and_theta(
+    ds_theta: xr.Dataset,
+    ds_K: xr.Dataset,
+    sol_sec: float,
+    output_png_path: str | Path,
+    *,
+    theta_var_name: str = "theta_surf",
+    K_var_name: str = "K",
+) -> None:
+    """
+    θ̄(0,t)（偏差）と地表面 K の日変化を同じ図に描画して保存する。
+
+    - x 軸: Local time [hour] (0〜24, 6 h ごとの目盛り)
+    - 左 y 軸: θ̄(0,t) anomaly [K]（赤破線）
+    - 右 y 軸: K_surface [m^2/s]（黒実線）
+    """
+    if theta_var_name not in ds_theta:
+        raise KeyError(f"入力 Dataset に変数 '{theta_var_name}' が見つかりません。")
+    if K_var_name not in ds_K:
+        raise KeyError(f"入力 Dataset に変数 '{K_var_name}' が見つかりません。")
+
+    time_sec = ds_theta["time"].to_numpy()
+    theta = ds_theta[theta_var_name].to_numpy().astype(float)
+
+    # 平均値
+    mean_key = f"{theta_var_name}_mean"
+    if mean_key in ds_theta.attrs:
+        theta_mean = float(ds_theta.attrs[mean_key])
+    else:
+        theta_mean = float(theta.mean())
+    theta_anom = theta - theta_mean
+
+    # 地表面の K (z=0 を代表として使用)
+    K_surface = ds_K[K_var_name].isel(z=0).to_numpy().astype(float)
+
+    # 地方時 [hour]
+    lt_hour = time_sec / sol_sec * 24.0
+
+    fig, ax_theta = plt.subplots(figsize=(6, 4))
+
+    # θ̄(0,t)（左軸）
+    line_theta, = ax_theta.plot(
+        lt_hour, theta_anom, linestyle="--", color="red", label=r"$\bar{\theta}(0,t)$"
+    )
+    ax_theta.set_xlim(0.0, 24.0)
+    ax_theta.set_xticks(np.arange(0, 25, 6))
+    ax_theta.set_xlabel("Local time (hour)")
+    ax_theta.set_ylabel(r"$\bar{\theta}(0,t)$ anomaly [K]", color="red")
+    ax_theta.tick_params(axis="y", labelcolor="red")
+    ax_theta.grid(True, linestyle="--", alpha=0.5)
+
+    # K（右軸）
+    ax_K = ax_theta.twinx()
+    line_K, = ax_K.plot(
+        lt_hour, K_surface, color="black", label="K", alpha=0.6
+    )
+    ax_K.set_ylabel("K [m$^2$/s]", color="black")
+    ax_K.tick_params(axis="y", labelcolor="black")
+
+    # タイトルと凡例
+    ax_theta.set_title("Diurnal distribution of $\\bar{\\theta}(0,t)$ and K")
+    lines = [line_theta, line_K]
+    labels = [line.get_label() for line in lines]
+    ax_theta.legend(lines, labels, loc="upper right")
+
+    out_png = Path(output_png_path)
+    out_png.parent.mkdir(parents=True, exist_ok=True)
+    fig.tight_layout()
+    fig.savefig(out_png, dpi=150)
+    plt.close(fig)
+
+    print(f"[INFO] Saved K & theta plot to: {out_png}")
+
+
+# ============================================================
+# ラッパー関数（他スクリプトからの利用を想定）
+# ============================================================
+
+
+def generate_K_from_surface_forcing_MCD(
+    surface_nc_path: str | Path,
+    output_nc_path: str | Path,
+    output_png_path: str | Path,
+    nz: int,
+    K_min: float,
+    K_max: float,
+    shape_power: float = 1.0,
+    *,
+    theta_var_name: str = "theta_surf",
+    K_var_name: str = "K",
+    sol_sec: float = 86400.0,
+) -> None:
+    """
+    surface forcing NetCDF から K(z, t) を作成し，NetCDF と図を保存する
+    一括処理用のラッパー関数。
+    """
+    surface_nc_path = Path(surface_nc_path)
+
+    ds_theta = xr.open_dataset(surface_nc_path)
+    try:
+        ds_K = create_K_dataset_from_surface_forcing(
+            ds_theta,
+            nz=nz,
+            K_min=K_min,
+            K_max=K_max,
+            shape_power=shape_power,
+            theta_var_name=theta_var_name,
+            K_var_name=K_var_name,
+            sol_sec=sol_sec,
+        )
+
+        save_K_dataset(ds_K, output_nc_path)
+        plot_K_and_theta(
+            ds_theta,
+            ds_K,
+            sol_sec=sol_sec,
+            output_png_path=output_png_path,
+            theta_var_name=theta_var_name,
+            K_var_name=K_var_name,
+        )
+    finally:
+        ds_theta.close()
+
+
+# ============================================================
+# CLI インターフェース
+# ============================================================
+
+
+def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=(
+            "MCD 由来の surface forcing (theta_surf) から "
+            "位相同期した拡散係数 K(z,t) を作成するスクリプト"
+        )
+    )
+
+    parser.add_argument(
+        "theta_nc",
+        help="入力 surface forcing NetCDF のパス "
+        "(例: surface_forcing_from_MCD/Ls90_Lat0_Long260_Alt0_fourierN6.nc)",
+    )
+    parser.add_argument(
+        "--nz",
+        type=int,
+        required=True,
+        help="高度方向の格子点数 nz（K を高さ方向にコピーする回数）",
+    )
+    parser.add_argument(
+        "--K-min",
+        type=float,
+        required=True,
+        help="K の最小値 [m^2/s]",
+    )
+    parser.add_argument(
+        "--K-max",
+        type=float,
+        required=True,
+        help="K の最大値 [m^2/s]",
+    )
+    parser.add_argument(
+        "--shape-power",
+        type=float,
+        default=1.0,
+        help="θ̄(0,t) の正規化値から K への写像で用いるべき指数 p (default: 1.0)",
+    )
+    parser.add_argument(
+        "--sol-sec",
+        type=float,
+        default=86400.0,
+        help="1 sol の秒数 (default: 86400.0)",
+    )
+    parser.add_argument(
+        "--output-nc",
+        type=str,
+        default=None,
+        help="出力 K NetCDF のパス（省略時は K_MCD/<basename>.nc）",
+    )
+    parser.add_argument(
+        "--output-fig",
+        type=str,
+        default=None,
+        help="出力図 PNG のパス（省略時は K_MCD/<basename>_K_theta.png）",
+    )
+
+    return parser.parse_args(argv)
+
+
+def main(argv: Optional[list[str]] = None) -> None:
+    args = _parse_args(argv)
+
+    theta_nc_path = Path(args.theta_nc)
+    if not theta_nc_path.is_file():
+        raise FileNotFoundError(f"入力ファイルが見つかりません: {theta_nc_path}")
+
+    basename = theta_nc_path.stem  # 例: Ls90_Lat0_Long260_Alt0_fourierN6
+
+    if args.output_nc is not None:
+        output_nc_path = Path(args.output_nc)
+    else:
+        output_nc_path = Path("K_MCD") / f"{basename}.nc"
+
+    if args.output_fig is not None:
+        output_png_path = Path(args.output_fig)
+    else:
+        output_png_path = Path("K_MCD") / f"{basename}_K_theta.png"
+
+    generate_K_from_surface_forcing_MCD(
+        surface_nc_path=theta_nc_path,
+        output_nc_path=output_nc_path,
+        output_png_path=output_png_path,
+        nz=args.nz,
+        K_min=args.K_min,
+        K_max=args.K_max,
+        shape_power=args.shape_power,
+        theta_var_name="theta_surf",
+        K_var_name="K",
+        sol_sec=args.sol_sec,
+    )
+
+
+if __name__ == "__main__":
+    main()

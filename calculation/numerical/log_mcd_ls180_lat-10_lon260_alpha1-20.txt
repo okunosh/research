@@ -1,0 +1,56 @@
+nohup: 入力を無視します
+[INFO] Using parameter file: params/mcd_ls180_lat-10_lon260_alpha1-20.py
+
+[INFO] Final parameters used for this run:
+planet: Mars
+g: 3.72
+omega: 7.077651711832821e-05
+K: None
+Ls: Ls90
+gamma: 0.00241
+Theta: 100.0
+num: 260
+dt: 0.1
+surface_temp: surface_forcing_from_MCD/Ls180_Lat-10_Lon260_Alt0_fourierN6.nc
+K_file: K_MCD/Ls180_Lat-10_Lon260_Alt0_fourierN6.nc
+alpha_deg: 1.2
+theta_0: 213.19184000000004
+output_path: output/mcd_ls180_lat-10_Lon260
+run_id: mcd_ls180_lat-10_Lon260
+case_name: mcd_Ls180
+
+(261,) (97,) (261, 97) (261, 97) (261, 97)
+t.shape:  (25317,)
+Traceback (most recent call last):
+  File "numerical_sim_exec.py", line 279, in <module>
+    last_output_dir = sim.run_simulation(params["output_path"], params["dt"])
+  File "/d5/d5a/user/2026M_okuno/slope_wind/calculation/numerical/simulation_def.py", line 232, in run_simulation
+    process_netcdf_directory_scatter(new_dir_path, ylim_max=None, confirm=True, save=True) #default
+  File "/d5/d5a/user/2026M_okuno/slope_wind/calculation/ql_plot.py", line 676, in process_netcdf_directory_scatter
+    scatter_plot_u_theta(directory, altitude, t, u_bars, theta_bars, Ks, fig_title_addstr, ylim_max, confirm)
+  File "/d5/d5a/user/2026M_okuno/slope_wind/calculation/ql_plot.py", line 422, in scatter_plot_u_theta
+    fig, ax = plt.subplots(2, 1, figsize=(10, 8), constrained_layout=True)
+  File "/usr/local/lib/python3.8/dist-packages/matplotlib/pyplot.py", line 1434, in subplots
+    fig = figure(**fig_kw)
+  File "/usr/local/lib/python3.8/dist-packages/matplotlib/pyplot.py", line 787, in figure
+    manager = new_figure_manager(
+  File "/usr/local/lib/python3.8/dist-packages/matplotlib/pyplot.py", line 306, in new_figure_manager
+    return _backend_mod.new_figure_manager(*args, **kwargs)
+  File "/usr/local/lib/python3.8/dist-packages/matplotlib/backend_bases.py", line 3474, in new_figure_manager
+    return cls.new_figure_manager_given_figure(num, fig)
+  File "/usr/local/lib/python3.8/dist-packages/matplotlib/backend_bases.py", line 3480, in new_figure_manager_given_figure
+    manager = cls.FigureManager(canvas, num)
+  File "/usr/local/lib/python3.8/dist-packages/matplotlib/backends/backend_gtk3.py", line 318, in __init__
+    app = _create_application()
+  File "/usr/local/lib/python3.8/dist-packages/matplotlib/backends/_backend_gtk.py", line 50, in _create_application
+    raise RuntimeError('Invalid DISPLAY variable')
+RuntimeError: Invalid DISPLAY variable
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "numerical_sim_exec.py", line 282, in <module>
+    log_error(e)
+  File "/d5/d5a/user/2026M_okuno/slope_wind/calculation/condition_manager.py", line 52, in log_error
+    file.write(error_message + "\n")
+TypeError: unsupported operand type(s) for +: 'RuntimeError' and 'str'

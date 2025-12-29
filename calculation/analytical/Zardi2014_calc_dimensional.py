@@ -54,23 +54,25 @@ def calculation(g,  alpha_deg, Theta, theta_0, gamma, omega, K, omega_t_value, n
 
 if __name__ == "__main__":
         #Parameters
-        num = 10#260
-        alpha_deg = 0.24
-        Theta = 40.
-        K = 100.
-        
+        num = 260
+        alpha_deg = 2.25
+        Theta = 5.
+        K = 10.
+
         #Earth parameters----------
+        
         g = 9.81
         omega = 2*np.pi /86400 #7.28e-5
         theta_0 = 288.
         gamma = 3.e-3
+        """
         #Mars parameters-----------
-        """
         g = 3.72 #Mars
-        omega = 7.08e-5 #2*pi /88775
-        theta_0 = 210
-        gamma = 4.02e-3
+        omega = 2*np.pi /88775 #7.08e-5 #2*pi /88775
+        theta_0 = 213.19
+        gamma = 3.42e-3
         """
+
         #time parameters------------
         #omega_t_values = [0, 0.25*np.pi, 0.5*np.pi, 0.75*np.pi, np.pi, 1.25*np.pi, 1.5*np.pi, 1.75*np.pi, 2*np.pi]
 
@@ -81,7 +83,8 @@ if __name__ == "__main__":
         psi = 0#3/2*np.pi
 
         #path
-        output_path ="output/test0501"#output/results"
+        RUN_ID = "alpha_dependency_test"
+        output_path = f"output/{RUN_ID}" #output/results"
 
         #calculate & save to netcdf
         for j in range(len(omega_t_values)):

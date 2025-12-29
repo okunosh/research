@@ -1,0 +1,183 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""
+plot_forcing_and_K_by_lat.py
+
+surface_forcing_parametric/ と K_parametric/ に保存された
+複数のケースの NetCDF を読み込み、
+
+  上段: 地表温位偏差 θ'(0,t)
+  下段: K(t,z=0)  （地表面代表値）
+
+を 2 行 1 列の図としてプロットする。
+"""
+
+import os
+import glob
+
+import numpy as np
+import xarray as xr
+import matplotlib.pyplot as plt
+
+
+# ===============================================================
+# ユーザー設定
+# ===============================================================
+
+# 強制と K のルートディレクトリ
+FORCING_ROOT = "surface_forcing_parametric"
+K_ROOT = "K_parametric"
+
+# プロットしたいケース名（サブディレクトリ名）
+# 例: surface_forcing_parametric/lat-30.0_Ls90.0/*.nc
+CASE_NAMES = [
+    "lat+0.0_Ls90.0",
+    "lat-15.0_Ls90.0",
+    "lat-30.0_Ls90.0",
+    "lat-45.0_Ls90.0",
+]
+
+# θ'(t) の変数名（make_surface_forcing_parametric.py のデフォルト）
+FORCING_VAR_NAME = "theta_0"
+
+# K の変数名候補と鉛直次元名候補
+K_VAR_NAME_CANDIDATES = ["K", "K_zt", "K_z_t"]
+VERT_DIM_CANDIDATES = ["z", "nz", "height"]
+
+
+# ===============================================================
+# 補助関数
+# ===============================================================
+
+def find_single_nc(pattern: str) -> str:
+    """glob パターンから唯一の NetCDF を探して返す。"""
+    paths = sorted(glob.glob(pattern))
+    if not paths:
+        raise FileNotFoundError(f"No NetCDF found for pattern: {pattern}")
+    if len(paths) > 1:
+        # 一応警告だけ出して先頭を採用
+        print(f"[WARN] Multiple files found for pattern {pattern}, using {paths[0]}")
+    return paths[0]
+
+
+def choose_var(ds: xr.Dataset, candidates):
+    """候補リストから最初に見つかった変数名を返す。"""
+    for name in candidates:
+        if name in ds.data_vars:
+            return name
+    raise KeyError(f"None of {candidates} found in dataset variables: {list(ds.data_vars)}")
+
+
+def choose_vert_dim(ds: xr.Dataset, candidates):
+    """候補リストから最初に見つかった鉛直次元名を返す。"""
+    for name in candidates:
+        if name in ds.dims:
+            return name
+    # fallback: 2次元で time 以外の次元を鉛直とみなす
+    if "time" in ds.dims and len(ds.dims) == 2:
+        for name in ds.dims:
+            if name != "time":
+                return name
+    raise KeyError(f"None of {candidates} found in dataset dims: {dict(ds.dims)}")
+
+
+def build_label_from_attrs(ds: xr.Dataset) -> str:
+    """
+    Dataset 属性から凡例ラベルを作成。
+    - 緯度と Ls があれば「30°S, Ls=90°」のように
+    - それが無ければ case_name を使う
+    """
+    lat = ds.attrs.get("latitude_deg", None)
+    Ls = ds.attrs.get("solar_longitude_deg", None)
+    case = ds.attrs.get("case_name", None)
+
+    parts = []
+    if lat is not None:
+        hemi = "S" if lat < 0 else "N"
+        parts.append(f"{abs(lat):.0f}°{hemi}")
+    if Ls is not None:
+        parts.append(f"Ls={Ls:.0f}°")
+    if not parts and case is not None:
+        parts.append(str(case))
+
+    return ", ".join(parts) if parts else "unknown"
+
+
+# ===============================================================
+# メイン処理
+# ===============================================================
+
+def main():
+    fig, (ax_forcing, ax_K) = plt.subplots(
+        nrows=2, ncols=1, figsize=(8, 6), sharex=True
+    )
+
+    for case_name in CASE_NAMES:
+        # ---------- 強制 NetCDF ----------
+        forcing_pattern = os.path.join(FORCING_ROOT, case_name, "*.nc")
+        forcing_nc = find_single_nc(forcing_pattern)
+        ds_f = xr.open_dataset(forcing_nc)
+
+        # 時間 [hour]
+        t_sec = ds_f["time"].values.astype(float)
+        t_hour = t_sec / 3600.0
+
+        if FORCING_VAR_NAME not in ds_f:
+            raise KeyError(
+                f"Variable '{FORCING_VAR_NAME}' not found in {forcing_nc}. "
+                f"Available: {list(ds_f.data_vars)}"
+            )
+        theta_anom = ds_f[FORCING_VAR_NAME].values
+
+        # 凡例ラベル（緯度, Ls など）
+        label = build_label_from_attrs(ds_f)
+        # case_name も入れたければ: label = f"{case_name} ({label})"
+
+        # 上段: θ'(0,t)
+        ax_forcing.plot(t_hour, theta_anom, label=label)
+
+        # ---------- K NetCDF ----------
+        # まず *_NZ*.nc を探し、無ければ *.nc
+        pattern_K = os.path.join(K_ROOT, case_name, "*_NZ*.nc")
+        if not glob.glob(pattern_K):
+            pattern_K = os.path.join(K_ROOT, case_name, "*.nc")
+        K_nc = find_single_nc(pattern_K)
+        ds_K = xr.open_dataset(K_nc)
+
+        # 変数名・鉛直次元名を決定
+        K_var = choose_var(ds_K, K_VAR_NAME_CANDIDATES)
+        vert_dim = choose_vert_dim(ds_K, VERT_DIM_CANDIDATES)
+
+        # 地表面の K(t) （鉛直の最下層）
+        K_da = ds_K[K_var]
+        K_surface = K_da.isel({vert_dim: 0}).values
+        t_K_sec = ds_K["time"].values.astype(float)
+        t_K_hour = t_K_sec / 3600.0
+
+        # 下段: K(z=0,t)
+        ax_K.plot(t_K_hour, K_surface, label=label)
+
+    # 軸ラベルなど
+    ax_forcing.set_ylabel("temperature anomaly[K]")
+    ax_K.set_ylabel("K(z=0) [m$^2$/s]")
+    ax_K.set_xlabel("Local time [hour]")
+
+    # x 軸: 0〜24h を 6h 刻み
+    ax_K.set_xlim(0, 24)
+    ax_K.set_xticks(np.arange(0, 25, 6))
+
+    ax_forcing.grid(True, linestyle="--", alpha=0.4)
+    ax_K.grid(True, linestyle="--", alpha=0.4)
+
+    ax_forcing.set_title(r"$\overline{\theta}(0,t)$ [K]")
+    ax_K.set_title("K(t, z=0) [m$^2$/s]")
+
+    ax_forcing.legend(loc="best")
+    ax_K.legend(loc="best")
+
+    fig.tight_layout()
+    plt.show()
+
+
+if __name__ == "__main__":
+    main()

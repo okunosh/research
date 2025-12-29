@@ -32,7 +32,8 @@ class WaveResolutions:
 
         self.const_u = self.Theta * self.N / (2 * self.gamma)
         self.const_theta = self.Theta / 2
-        self.n = np.linspace(0,2.*np.pi*self.l_plus, self.num+1) #???con
+        Z_TOP_MULT = 1.0
+        self.n = np.linspace(0, Z_TOP_MULT * 2.*np.pi*self.l_plus, self.num+1) #???con
 
         self.output = self.resolutions()
 

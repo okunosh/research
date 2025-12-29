@@ -1,0 +1,317 @@
+import sys
+import argparse
+from pathlib import Path
+import importlib.util
+import subprocess
+
+import xarray as xr
+
+from simulation_def import Simulation
+from condition_manager import (
+    write_conditions_to_file,
+    handle_error,
+    setup_signal_handler,
+    log_error,
+)
+
+
+def show_params(params: dict) -> None:
+    """辞書の中身を確認用に表示するユーティリティ."""
+    for key, value in params.items():
+        print(f"{key}: {value}")
+
+
+def theta0_from_forcing(path: str) -> float:
+    """
+    surface_forcing の NetCDF から theta_surf_mean を読み取る。
+    無ければ KeyError を投げる。
+    """
+    path_obj = Path(path)
+    if not path_obj.exists():
+        raise FileNotFoundError(f"surface_forcing ファイルが存在しません: {path}")
+
+    with xr.open_dataset(path_obj) as ds:
+        if "theta_surf_mean" not in ds.attrs:
+            raise KeyError(
+                "NetCDF の global attributes に 'theta_surf_mean' がありません "
+                f"(file={path})"
+            )
+        theta0 = ds.attrs["theta_surf_mean"]
+
+    return float(theta0)
+
+
+def load_param_module(path_str: str):
+    """
+    パラメータファイル (.py) を importlib で読み込んでモジュールとして返す。
+    """
+    path = Path(path_str)
+    if not path.exists():
+        raise FileNotFoundError(f"パラメータファイルが存在しません: {path_str}")
+
+    spec = importlib.util.spec_from_file_location(path.stem, path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def load_base_cases() -> dict:
+    """
+    params/base_case.py を読み込み、CASES 辞書を返す。
+    - ファイルが無い
+    - CASES が定義されていない
+    いずれの場合も例外を投げる。
+    """
+    base_path = Path(__file__).resolve().parent / "params" / "base_cases.py"
+    if not base_path.exists():
+        raise FileNotFoundError(
+            f"base_cases ファイルが見つかりません: {base_path}\n"
+            "params/base_cases.py に CASES 辞書を定義してください。"
+        )
+
+    spec = importlib.util.spec_from_file_location("base_cases", base_path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    if not hasattr(mod, "CASES"):
+        raise AttributeError(
+            f"{base_path} に CASES が定義されていません。"
+        )
+
+    cases = mod.CASES
+    if not isinstance(cases, dict):
+        raise TypeError("CASES は dict である必要があります。")
+
+    return cases
+
+
+def print_grouped_params(
+    base_params: dict,
+    param_params: dict,
+    derived_params: dict,
+    run_id: str,
+    param_file: str,
+    case_name: str,
+) -> None:
+    """
+    --show-params 用の詳細表示。
+    - base_params    : base_cases.py (季節テンプレート) に定義されたパラメータ
+    - param_params   : mars_Ls**_*.py に定義された PARAMS（BASE+OVERRIDES 後）
+    - derived_params : numerical_sim_exec.py 内で計算・付加したもの (theta0, output_path 等)
+    """
+    print("\n[INFO] Parameter summary (--show-params enabled)")
+    print(f"  param_file: {param_file}")
+    print(f"  run_id    : {run_id}")
+    print(f"  CASE_NAME : {case_name}")
+    print()
+
+    # --- BASE CASE PARAMS ---
+    print("----- BASE CASE PARAMS (from params/base_cases.py) -----")
+    for k in sorted(base_params.keys()):
+        print(f"{k}: {base_params[k]!r}")
+    print()
+
+    # --- OVERRIDES / EXTRA PARAMS ---
+    print("----- OVERRIDES / EXTRA PARAMS (from your param file) -----")
+    printed_any = False
+    for k in sorted(param_params.keys()):
+        if k in base_params and param_params[k] == base_params[k]:
+            continue
+        print(f"{k}: {param_params[k]!r}")
+        printed_any = True
+    if not printed_any:
+        print("(base_cases からの上書き・追加パラメータはありません)")
+    print()
+
+    # --- DERIVED PARAMS ---
+    print("----- DERIVED PARAMS (computed in numerical_sim_exec.py) -----")
+    if not derived_params:
+        print("(derived params はありません)")
+    else:
+        for k in sorted(derived_params.keys()):
+            print(f"{k}: {derived_params[k]!r}")
+    print()
+
+
+if __name__ == "__main__":
+    # ==== 0. 引数パース ====
+    parser = argparse.ArgumentParser(
+        description="Run numerical simulation with external parameter file."
+    )
+    parser.add_argument(
+        "param_file",
+        help="Path to parameter .py file (e.g., params/mars_Ls90_alpha0-62.py)",
+    )
+    parser.add_argument(
+        "--show-params",
+        action="store_true",
+        help="パラメータを base_cases / param_file / derived に分けて表示する",
+    )
+    args = parser.parse_args()
+
+    param_file = args.param_file
+    print(f"[INFO] Using parameter file: {param_file}")
+
+    # ==== 1. パラメータモジュールを読み込み ====
+    try:
+        param_mod = load_param_module(param_file)
+    except Exception as e:
+        print(f"[ERROR] パラメータモジュールの読み込みに失敗しました: {e}")
+        sys.exit(1)
+
+    # 必須シンボルの存在チェック（補間しない）
+    for name in ("PARAMS", "CASE_NAME", "RUN_ID"):
+        if not hasattr(param_mod, name):
+            print(f"[ERROR] パラメータファイルに必要なシンボル {name} が定義されていません。")
+            sys.exit(1)
+
+    case_name = param_mod.CASE_NAME
+    run_id = param_mod.RUN_ID
+    param_params = param_mod.PARAMS.copy()
+
+    # ==== 2. theta0, output_path など derived_params を作成 ====
+    if "surface_temp" not in param_params:
+        print("[ERROR] PARAMS に 'surface_temp' が含まれていません。")
+        sys.exit(1)
+
+    try:
+        theta0 = theta0_from_forcing(param_params["surface_temp"])
+    except Exception as e:
+        print(f"[ERROR] theta0_from_forcing に失敗しました: {e}")
+        sys.exit(1)
+
+    output_dir = f"output/{run_id}"
+
+    derived_params = {
+        "theta_0": theta0,
+        "output_path": output_dir,
+        "run_id": run_id,
+        "case_name": case_name,
+    }
+
+    # ==== 3. 最終的に Simulation に渡す params を作成 ====
+    params = param_params.copy()
+    params.update(derived_params)
+
+    # ==== 4. パラメータ表示 ====
+    if args.show_params:
+        try:
+            base_cases = load_base_cases()
+        except Exception as e:
+            print(f"[ERROR] base_case の読み込みに失敗しました: {e}")
+            sys.exit(1)
+
+        if case_name not in base_cases:
+            print(
+                f"[ERROR] CASE_NAME='{case_name}' が base_cases.CASES に存在しません。"
+            )
+            sys.exit(1)
+
+        base_params = base_cases[case_name]
+        print_grouped_params(
+            base_params=base_params,
+            param_params=param_params,
+            derived_params=derived_params,
+            run_id=run_id,
+            param_file=param_file,
+            case_name=case_name,
+        )
+    else:
+        print("\n[INFO] Final parameters used for this run:")
+        show_params(params)
+        print()
+
+    # ==== 5. Simulation をセットアップして実行 ====
+    # 必須キーが無ければ KeyError を投げて終了
+    required_keys = [
+        "g",
+        "alpha_deg",
+        "Theta",
+        "gamma",
+        "omega",
+        "K",
+        "num",
+        "dt",
+        "K_file",
+        "surface_temp",
+        "theta_0",
+        "output_path",
+    ]
+    for k in required_keys:
+        if k not in params:
+            print(f"[ERROR] PARAMS に必要なキーが足りません: {k}")
+            sys.exit(1)
+
+    try:
+        sim = Simulation(
+            params["g"],
+            params["alpha_deg"],
+            params["Theta"],
+            params["theta_0"],  # （コメント上は no use だがそのまま渡す）
+            params["gamma"],
+            params["omega"],
+            params["K"],
+            params["num"],
+            params["dt"],
+            params["K_file"],
+            params["surface_temp"],
+        )
+    except KeyError as e:
+        print(f"[ERROR] Simulation 初期化時に KeyError が発生しました: {e}")
+        sys.exit(1)
+
+    # ==== 6. 計算条件を新しい CSV に記録 ====
+    csv_path = "../calculation_conditions_v2.csv"
+    try:
+        # new_dir はまだ分からないのでここでは None のまま
+        write_conditions_to_file(csv_path, params, None)
+    except Exception as e:
+        print(f"[ERROR] 計算条件の書き込みに失敗しました: {e}")
+        sys.exit(1)
+
+    # ==== 7. シグナルハンドラを設定して本番実行 ====
+    setup_signal_handler(params)
+
+    # ==== 8. 数値計算後にデータ解析を実行 ====
+    try:
+        # Simulation.run_simulation は、今回の実装で
+        # 「この param_file で計算したケースの出力ディレクトリ」を返す想定
+        last_output_dir = sim.run_simulation(params["output_path"], params["dt"])
+    except Exception as e:
+        # 数値計算側で例外が出た場合はログ＆再スロー
+        log_error(e)
+        handle_error(e)
+        raise
+    else:
+        # ---- 8-1. 自動でラスト1日の解析を実行 ----
+        if last_output_dir:
+            project_root = Path(__file__).resolve().parent
+            analysis_script = project_root / "data-analysis" / "run_lastday_analysis_for_case.py"
+
+            if analysis_script.exists():
+                print(f"[INFO] Running last-day analysis for: {last_output_dir}")
+                try:
+                    subprocess.run(
+                        [sys.executable, str(analysis_script), str(last_output_dir)],
+                        check=True,
+                    )
+                except subprocess.CalledProcessError as e:
+                    # 数値計算の結果自体は残しておきたいので警告止まり
+                    print(
+                        f"[WARN] Last-day analysis failed (exit code={e.returncode}). "
+                        "Simulation outputs are kept as is."
+                    )
+                except Exception as e:
+                    print(
+                        f"[WARN] Unexpected error while running last-day analysis: {e}"
+                    )
+            else:
+                print(
+                    f"[WARN] Analysis script not found: {analysis_script}. "
+                    "Skipping automatic last-day analysis."
+                )
+        else:
+            print(
+                "[WARN] Simulation.run_simulation did not return an output directory. "
+                "Skipping automatic last-day analysis."
+            )

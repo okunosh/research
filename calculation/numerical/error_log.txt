@@ -1,0 +1,50 @@
+name 'conditions' is not defined
+name 'conditions' is not defined
+name 'conditions' is not defined
+name 'conditions' is not defined
+name 'conditions' is not defined
+Process interrupted by user
+Process interrupted by user
+Process interrupted by user
+Process interrupted by user
+Process interrupted by user
+Process interrupted by user
+operands could not be broadcast together with shapes (864000,) (261,) 
+operands could not be broadcast together with shapes (864000,) (261,) 
+Process interrupted by user
+Process interrupted by user
+Process interrupted by user
+Process interrupted by user
+Process interrupted by user
+Process interrupted by user
+Process interrupted by user
+Process interrupted by user
+Process interrupted by user
+Process interrupted by user
+Process interrupted by user
+Process interrupted by user
+Process interrupted by user
+Process interrupted by user
+Process interrupted by user
+Process interrupted by user
+Process interrupted by user
+Process interrupted by user
+Process interrupted by user
+Process interrupted by user
+Process interrupted by user
+Process interrupted by user
+Process interrupted by user
+Process interrupted by user
+Process interrupted by user
+Process interrupted by user
+index 0 is out of bounds for axis 0 with size 0
+Process interrupted by user
+Process interrupted by user
+Process interrupted by user
+Process interrupted by user
+Process interrupted by user
+Process interrupted by user
+Process interrupted by user
+Process interrupted by user
+Process interrupted by user
+Process interrupted by user

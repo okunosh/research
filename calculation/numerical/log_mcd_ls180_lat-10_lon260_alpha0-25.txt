@@ -1,0 +1,80 @@
+nohup: 入力を無視します
+posx and posy should be finite values
+posx and posy should be finite values
+/d5/d5a/user/2026M_okuno/slope_wind/calculation/numerical/data-analysis/visualization/plot_momentumMixing.py:389: UserWarning: The input coordinates to pcolormesh are interpreted as cell centers, but are not monotonically increasing or decreasing. This may lead to incorrectly calculated cell edges, in which case, please supply explicit cell edges to pcolormesh.
+  m = ax.pcolormesh(X, Z, U_last, cmap=cmap, norm=norm, shading="auto")
+[info] using g = 3.71 m s^-2
+[saved] output/mcd_ls180_lat-10_Lon260/Mars/20251201T123312_SubCritical_num261_alp0-25_gamma2-41_dt0.1/Ri_analysis_summary.png
+[Ri debug] min = -9.44e+04, max = 5e+04
+[Ri debug] fraction(0 < Ri < 0.25) = 0.046
+[done] Outputs saved under: output/mcd_ls180_lat-10_Lon260/Mars/20251201T123312_SubCritical_num261_alp0-25_gamma2-41_dt0.1
+/d5/d5a/user/2026M_okuno/slope_wind/calculation/analytical/Zardi2014_def.py:31: RuntimeWarning: invalid value encountered in sqrt
+  self.l_minus = np.sqrt(2 * K / self.omega_minus)
+/d5/d5a/user/2026M_okuno/slope_wind/calculation/numerical/simulation_def.py:186: RuntimeWarning: invalid value encountered in sqrt
+  self.l_minus = np.sqrt(2 * self.K / self.omega_minus)
+/d5/d5a/user/2026M_okuno/slope_wind/calculation/numerical/simulation_def.py:186: RuntimeWarning: invalid value encountered in sqrt
+  self.l_minus = np.sqrt(2 * self.K / self.omega_minus)
+[INFO] Using parameter file: params/mcd_ls180_lat-10_lon260_alpha0-25.py
+
+[INFO] Final parameters used for this run:
+planet: Mars
+g: 3.72
+omega: 7.077651711832821e-05
+K: None
+Ls: Ls90
+gamma: 0.00241
+Theta: 100.0
+num: 260
+dt: 0.1
+surface_temp: surface_forcing_from_MCD/Ls180_Lat-10_Lon260_Alt0_fourierN6.nc
+K_file: K_MCD/Ls180_Lat-10_Lon260_Alt0_fourierN6.nc
+alpha_deg: 0.25
+theta_0: 213.19184000000004
+output_path: output/mcd_ls180_lat-10_Lon260
+run_id: mcd_ls180_lat-10_Lon260
+case_name: mcd_Ls180
+
+(261,) (97,) (261, 97) (261, 97) (261, 97)
+t.shape:  (25317,)
+(1, 25317)
+
+allDay Fig is saved!
+-----
+altitudes:  (1, 6525)
+t_4th_day:  (1, 6525)
+u_bars_4th_day:  (1, 6525)
+theta_bars_4th_day:  (1, 6525)
+K:  (864000,)
+-----
+u最大値: 20.9（t=18, altitude=910.5）
+u最小値: -18.3（t=8, altitude=1094.7）
+theta最大値: 80.3（t=13, altitude=0）
+theta最小値: -51（t=4, altitude=0）
+t_4th_day.shape: (1, 6525)
+altitudes.shape:  (1, 6525)
+4th Day Fig is saved!
+##Upslope
+----------
+g [m/s^2]:  3.72
+theta_surf at umax [K]:  226.42964544150453
+theta_z at umax [K]: 256.84424515865584
+theta mean between two altitudes [K]:  241.63694530008019
+z at umax [m]:  910.4997371429586
+umax [m/s]:  20.90417479454793
+Richardson Number:  0.9756082778094254
+----------
+##Downslope
+----------
+g [m/s^2]:  3.72
+theta_surf at umax [K]:  242.98736380999173
+theta_z at umax [K]: 212.85901951919809
+theta mean between two altitudes [K]:  227.92319166459492
+z at umax [m]:  1094.7006142302837
+umax [m/s]:  -18.291052400088752
+Richardson Number:  -1.6089689443703188
+----------
+===
+u_min_idx:  2133
+u_min(LT, z):  (261,)
+altitudes(LT):  (261,)
+[INFO] Running last-day analysis for: output/mcd_ls180_lat-10_Lon260/Mars/20251201T123312_SubCritical_num261_alp0-25_gamma2-41_dt0.1

@@ -1,3 +1,4 @@
+
 import numpy as np
 import xarray as xr
 import os
@@ -66,7 +67,8 @@ class NumericalDatasetToNetcdf(DatasetToNetcdf):
         self.ds.to_netcdf(output_file)
 
 day2sec = 24 * 3600
-    
+Z_TOP_MULT = 1.0
+
 class Simulation(WaveResolutions):
 
     def __init__(self, g, alpha_deg, Theta, theta_0, gamma, omega, K, num, dt, K_file, surface_temp):
@@ -75,13 +77,19 @@ class Simulation(WaveResolutions):
         
         super().__init__(g, alpha_deg, Theta, theta_0, gamma, omega, K_val, None, num)
         self.dt = dt
-        self.dn = 2* np.pi * self.l_plus / self.num
+        self.dn = Z_TOP_MULT * 2* np.pi * self.l_plus / self.num
         self.mat_num = self.num+1
 
+      
         #temporal and spatial gamma
-        self.gamma_file = "gamma/gamma_const_4.020e-03.nc"
+        #self.gamma_file = "gamma/gamma_const_2.410e-03.nc"#(261, 864000)
+        self.gamma_file = f'gamma/gamma_const_{gamma:.3e}_nz{self.mat_num:3d}.nc'#(nz, 864000)
+        #self.gamma_file = "test_spaciotmp_gamma0717.nc"#(864000, 261) need to .T
+        
+        #print("gamma_file_name: ", self.gamma_file)
         ds_gamma = xr.open_dataset(self.gamma_file)
-        self.gamma_zt = ds_gamma["gamma"].values
+        self.gamma_zt = ds_gamma["gamma"].values#.T
+        #print("gamma_zt.shape: ", self.gamma_zt.shape)
         #-----------------
         
         ##will be changed!
@@ -106,7 +114,7 @@ class Simulation(WaveResolutions):
 
     #block matrix
     def updateK(self, K): #K: raw vector whose length is equal to self.mat_num
-        coeff = self.dt *  self.num**2 * self.omega_plus / 8/ np.pi**2
+        coeff = self.dt *  self.num**2 * self.omega_plus / 8/ np.pi**2 / Z_TOP_MULT**2
         E = np.ones_like(K)
         A = np.ones_like(K)*coeff
         AA = E - 2*A
@@ -156,8 +164,16 @@ class Simulation(WaveResolutions):
         return block_matrix
     
     def run_simulation(self, output_path, dt):
-        surf_con = xr.open_dataset(self.surface_temp)
-        surface_theta = surf_con.theta_0.values
+        with xr.open_dataset(self.surface_temp) as surf_con:
+            if "theta_surf" in surf_con.data_vars:
+                surface_theta = surf_con["theta_surf"].values
+            elif "theta_0" in surf_con.data_vars:
+                surface_theta = surf_con.theta_0.values
+            else:
+                raise KeyError(
+                    f"there are no 'theta_surf' and 'theta_0' in surface_temp={self.surface_temp}"
+                    )
+        
         #print(datetime.now().time())
         K_ds = xr.open_dataset(self.K_file)
         K_vec = K_ds.K.values#.reshape(K_ds.K.values.shape[1], K_ds.K.values.shape[0])
@@ -168,7 +184,7 @@ class Simulation(WaveResolutions):
             self.K = K_[0]
             self.l_plus = np.sqrt(2 * self.K / self.omega_plus)
             self.l_minus = np.sqrt(2 * self.K / self.omega_minus)
-            self.n = np.linspace(0, 2.*np.pi*self.l_plus, self.num+1)
+            self.n = np.linspace(0, Z_TOP_MULT *2.*np.pi*self.l_plus, self.num+1)
 
             #gamma
             gamma_profile = self.gamma_zt[:, num]
@@ -177,8 +193,9 @@ class Simulation(WaveResolutions):
             B = self.dt * N**2 * np.sin(self.alpha)/gamma_profile
             C = -self.dt * gamma_profile * np.sin(self.alpha)
 
+            #print("B.shape, :", B.shape)
             matrix = self.update_block_matrix(K_, B ,C)
-            self.dn =  2* np.pi * self.l_plus / self.num
+            self.dn =  Z_TOP_MULT * 2* np.pi * self.l_plus / self.num
             self.w = matrix @ self.w
             self.w[self.num+1] = surface_theta[num]
 
@@ -212,5 +229,10 @@ class Simulation(WaveResolutions):
                     #condition manager!
                 data.save_to_netcdf(new_dir_path)
                 #print("finished:"+str(t), datetime.now().time())
-        process_netcdf_directory_scatter(new_dir_path, confirm=True, save=True)
-        #print(datetime.now().time())
+        process_netcdf_directory_scatter(new_dir_path, ylim_max=None, confirm=True, save=True) #default
+        #process_netcdf_directory_scatter(new_dir_path, ylim_max=None,confirm=True, save=False, adj_zmax=False) #add
+        #process_netcdf_directory_scatter(new_dir_path, ylim_max=10000, confirm=True, save=False, adj_zmax=False)#add
+        #process_netcdf_directory_scatter(new_dir_path, ylim_max=None, confirm=True, save=False, adj_zmax=True) #add
+
+        return new_dir_path
+        

@@ -6,6 +6,14 @@ import glob
 
 from ql_plot import NetCDFProcessor, process_netcdf_directory_scatter, extract_4th_day, reshape_variables_for_scatter, get_max_min_idxs, get_max_min_vals, plot_4th_day
 
+plt.rcParams["font.size"] = 14 
+plt.rcParams["xtick.labelsize"] = 12 # 目盛りのフォントサイズ
+plt.rcParams["ytick.labelsize"] = 12 # 目盛りのフォントサイズ
+plt.rcParams["axes.labelsize"] = 16
+
+
+
+
 #get parameters from netcdf 
 def get_t0_file(directory):
     path = directory + "/*t0000000*" #t0 file
@@ -221,7 +229,7 @@ def plot_vertical_gradients_eachfig(directory, du_dz, dtheta_dz, altitude_2d, ti
     sc1 = ax1.scatter(time_flat, altitude_flat, c=du_dz_flat, cmap=cmap, norm=norm, s=5)
     ax1.set_ylabel('Altitude [m]')
     ax1.set_title('Vertical Wind Shear ∂u/∂z [1/s]')
-    ax1.set_xlabel('Time')
+    ax1.set_xlabel('LT [hour]')
     ax1.grid(True)
     cbar1 = fig1.colorbar(sc1, ax=ax1)
     cbar1.set_label('Gradient Value')
@@ -231,7 +239,7 @@ def plot_vertical_gradients_eachfig(directory, du_dz, dtheta_dz, altitude_2d, ti
     sc2 = ax2.scatter(time_flat, altitude_flat, c=dtheta_dz_flat, cmap=cmap, norm=norm, s=5)
     ax2.set_ylabel('Altitude [m]')
     ax2.set_title('Potential Temperature Gradient ∂θ/∂z [K/m]')
-    ax2.set_xlabel('Time')
+    ax2.set_xlabel('LT [hour]')
     ax2.grid(True)
     cbar2 = fig2.colorbar(sc2, ax=ax2)
     cbar2.set_label('Gradient Value')
@@ -299,7 +307,7 @@ def plot_richardson_number(directory, Ri, t_mid, z_mid):
     cbar.set_label('Ri')
 
     # 軸ラベルなど
-    ax.set_xlabel('Time')
+    ax.set_xlabel('LT [hour]')
     ax.set_ylabel('Altitude [m]')
     ax.set_title('Richardson Number')
     # カラーバーの目盛り位置を手動指定（例：vmin, 0.25, vmax）

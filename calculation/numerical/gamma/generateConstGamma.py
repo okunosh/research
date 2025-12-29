@@ -1,0 +1,55 @@
+import numpy as np
+import xarray as xr
+
+def create_constant_gamma_netcdf(nz, nt, gamma_val, output_dir):
+    """
+    指定された定数 gamma で gamma(z, t) = gamma_const の NetCDF ファイルを作成する
+
+    Parameters:
+        nz (int): 高度方向の格子点数
+        nt (int): 時間ステップ数
+        gamma_const (float): 温位傾度（K/m）
+        output_dir (str): 出力先ディレクトリ
+    """
+
+    # gamma 配列生成
+    gamma_zt = np.full((nz, nt), gamma_const, dtype=np.float32)
+
+    # Dataset 作成
+    ds = xr.Dataset(
+        {
+            "gamma": (("z", "t"), gamma_zt)
+        },
+        coords={
+            "z": np.arange(nz),
+            "t": np.arange(nt)
+        }
+    )
+
+    # 属性付加
+    ds["gamma"].attrs["units"] = "K/m"
+    ds["gamma"].attrs["description"] = f"Constant potential temperature gradient: {gamma_const} K/m"
+
+    ds["z"].attrs["description"] = "Vertical index (not physical height)"
+    ds["t"].attrs["description"] = "Time step index (e.g., 0.1 sec resolution assumed)"
+
+    ds.attrs["title"] = "Gamma constant distribution for slope flow simulation"
+    ds.attrs["description"] = f"Gamma is constant at {gamma_const} K/m over {nt} time steps and {nz} vertical levels."
+
+    # ファイル名組み立て
+    filename = f"{output_dir}/gamma_const_{gamma_const:.3e}_nz{nz}.nc"
+    ds.to_netcdf(filename)
+
+    print(f"[✓] NetCDF saved to: {filename}")
+    return filename
+
+
+if __name__ == "__main__":
+    # set parameter
+    nz = 261 #781#261
+    nt = 864000
+    gamma_const = 3.09e-03 #4.09e-03 #6.207e-03 #3.82e-03 #5.64e-03 #3.42e-03 #4.020e-03 #1.e-4 #2.410e-3  # K/m
+    output_dir = "gamma"
+
+    #
+    create_constant_gamma_netcdf(nz, nt, gamma_const, output_dir)

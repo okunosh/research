@@ -1,0 +1,78 @@
+nohup: 入力を無視します
+posx and posy should be finite values
+posx and posy should be finite values
+/d5/d5a/user/2026M_okuno/slope_wind/calculation/numerical/data-analysis/visualization/plot_momentumMixing.py:612: UserWarning: This figure was using constrained_layout, but that is incompatible with subplots_adjust and/or tight_layout; disabling constrained_layout.
+  fig.tight_layout()
+/d5/d5a/user/2026M_okuno/slope_wind/calculation/numerical/data-analysis/visualization/plot_momentumMixing.py:430: UserWarning: The input coordinates to pcolormesh are interpreted as cell centers, but are not monotonically increasing or decreasing. This may lead to incorrectly calculated cell edges, in which case, please supply explicit cell edges to pcolormesh.
+  m = ax.pcolormesh(X, Z, U_last, cmap=cmap, norm=norm, shading="auto")
+[info] using g = 3.71 m s^-2
+[saved] output/mcd_ls180_lat-10_Lon260/Mars/20251201T195904_SuperCritical_num261_alp1-5_gamma2-41_dt0.1/Ri_analysis_summary.png
+[Ri debug] min = -5.62e+04, max = 5.39e+04
+[Ri debug] fraction(0 < Ri < 0.25) = 0.248
+23 [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+plot_mixed_u_like_reference
+[done] Outputs saved under: output/mcd_ls180_lat-10_Lon260/Mars/20251201T195904_SuperCritical_num261_alp1-5_gamma2-41_dt0.1
+[INFO] Using parameter file: params/mcd_ls180_lat-10_lon260_alpha1-50.py
+
+[INFO] Final parameters used for this run:
+planet: Mars
+g: 3.72
+omega: 7.077651711832821e-05
+K: None
+Ls: Ls90
+gamma: 0.00241
+Theta: 100.0
+num: 260
+dt: 0.1
+surface_temp: surface_forcing_from_MCD/Ls180_Lat-10_Lon260_Alt0_fourierN6.nc
+K_file: K_MCD/Ls180_Lat-10_Lon260_Alt0_fourierN6.nc
+alpha_deg: 1.5
+theta_0: 213.19184000000004
+output_path: output/mcd_ls180_lat-10_Lon260
+run_id: mcd_ls180_lat-10_Lon260
+case_name: mcd_Ls180
+
+(261,) (97,) (261, 97) (261, 97) (261, 97)
+t.shape:  (25317,)
+(1, 25317)
+
+allDay Fig is saved!
+-----
+altitudes:  (1, 6525)
+t_4th_day:  (1, 6525)
+u_bars_4th_day:  (1, 6525)
+theta_bars_4th_day:  (1, 6525)
+K:  (864000,)
+-----
+u最大値: 78.0（t=14, altitude=906.49）
+u最小値: -43.7（t=6, altitude=307.136）
+theta最大値: 80.3（t=13, altitude=0）
+theta最小値: -51（t=4, altitude=0）
+t_4th_day.shape: (1, 6525)
+altitudes.shape:  (1, 6525)
+4th Day Fig is saved!
+##Upslope
+----------
+g [m/s^2]:  3.72
+theta_surf at umax [K]:  305.22830584653946
+theta_z at umax [K]: 254.96038284386458
+theta mean between two altitudes [K]:  280.094344345202
+z at umax [m]:  906.489690529502
+umax [m/s]:  78.01720849527523
+Richardson Number:  -0.09942866236759562
+----------
+##Downslope
+----------
+g [m/s^2]:  3.72
+theta_surf at umax [K]:  191.19553407381363
+theta_z at umax [K]: 215.90865086209544
+theta mean between two altitudes [K]:  203.55209246795454
+z at umax [m]:  307.13639859906357
+umax [m/s]:  -43.682592614453206
+Richardson Number:  0.07269580750638961
+----------
+===
+u_min_idx:  1606
+u_min(LT, z):  (261,)
+altitudes(LT):  (261,)
+[INFO] Running last-day analysis for: output/mcd_ls180_lat-10_Lon260/Mars/20251201T195904_SuperCritical_num261_alp1-5_gamma2-41_dt0.1

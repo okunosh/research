@@ -1,0 +1,93 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+from pathlib import Path
+
+# ==== 1. CSV 読み込み ====
+csv_path = Path(
+    "output/mcd_ls180_lat-10_Lon260/Mars/mcd_ls180_lat-10_Lon260_peak_summary.csv"
+)
+df = pd.read_csv(csv_path)
+
+# ==== 2. 必要な列だけ残して NaN を落とす ====
+cols_needed = [
+    "alpha",
+    "u_max_value",
+    "u_t_at_max",
+    "u_min_value",
+    "u_t_at_min",
+    "theta_t_at_max",
+    "theta_t_at_min",
+]
+df_plot = df.dropna(subset=cols_needed).copy()
+
+# αの範囲を絞る（例：0〜2度）
+df_plot = df_plot[(df_plot["alpha"] >= 0.0) & (df_plot["alpha"] <= 2.0)]
+
+# ==== 3. θピーク時刻のユニーク値を取得 ====
+theta_t_max_uniques = np.unique(df_plot["theta_t_at_max"].round(6))
+theta_t_min_uniques = np.unique(df_plot["theta_t_at_min"].round(6))
+
+print("theta_t_at_max unique (hour):", theta_t_max_uniques)
+print("theta_t_at_min unique (hour):", theta_t_min_uniques)
+
+# ==== 4. 図を 2 枚に統合：上=|u|, 下=LT ====
+fig, (ax_u_abs, ax_lt) = plt.subplots(2, 1, figsize=(6, 8), sharex=True)
+
+# ---- 上：alpha vs |u| (up/down 両方) ----
+ax_u_abs.scatter(
+    df_plot["alpha"],
+    df_plot["u_max_value"].abs(),
+    label="|u_max| (upslope)",
+)
+ax_u_abs.scatter(
+    df_plot["alpha"],
+    df_plot["u_min_value"].abs(),
+    marker="x",
+    label="|u_min| (downslope)",
+)
+
+ax_u_abs.set_ylabel("|u| at peaks")
+ax_u_abs.set_title("alpha vs |u| and LT of peaks (last 24h)")
+ax_u_abs.legend(loc="best")
+
+# ---- 下：alpha vs LT (up/down 両方) + theta_max/min の横線 ----
+ax_lt.scatter(
+    df_plot["alpha"],
+    df_plot["u_t_at_max"],
+    label="LT at u_max",
+)
+ax_lt.scatter(
+    df_plot["alpha"],
+    df_plot["u_t_at_min"],
+    marker="x",
+    label="LT at u_min",
+)
+
+# θ_max / θ_min の補助線（ユニーク値だけ）
+for i, lt in enumerate(theta_t_max_uniques):
+    ax_lt.axhline(
+        lt,
+        linestyle="--",
+        linewidth=1,
+        label="theta_max" if i == 0 else None,
+    )
+
+for i, lt in enumerate(theta_t_min_uniques):
+    ax_lt.axhline(
+        lt,
+        linestyle=":",
+        linewidth=1,
+        label="theta_min" if i == 0 else None,
+    )
+
+ax_lt.set_ylabel("Local time [hour]")
+ax_lt.set_xlabel("Slope angle alpha [deg]")
+ax_lt.legend(loc="best")
+
+# ==== 5. グリッド追加 ====
+for ax in (ax_u_abs, ax_lt):
+    ax.grid(True, linestyle=":", alpha=0.5)
+
+plt.tight_layout()
+plt.show()

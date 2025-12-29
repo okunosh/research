@@ -1,0 +1,42 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+t = np.linspace(0, 48, 1000)
+"""
+def func(t):
+    period = 24
+    a = np.sin(2*np.pi * t / period)
+    b = np.sin(2*np.pi * 2*t / period)*np.exp(t)
+    c = 4 / (np.exp(t) + np.exp(-t))**2
+    d = np.exp(t) * c
+    return a+d
+
+y = func(t)
+"""
+def f(t):
+    if t<np.pi/3:
+        return np.cos(t-np.pi/3)
+    else:
+        return (3/2/np.pi * (np.pi - t))**0.5
+
+
+def ft(t):
+    if 0<=t<6:
+        return 180
+    elif 6<=t<=13:
+        return 220 + 40 * np.cos(2*np.pi *(t-13)/14)
+    else:
+        return 180 + 80 *(0.5*np.cos(2*np.pi*(t-13)/22)+0.5)**0.5
+                                 
+t = np.linspace(0, 24, 1000)
+#y = np.where(t<np.pi/3, np.cos(t-np.pi/3), (3/2/np.pi * (np.pi - t))**0.5)
+
+y = np.zeros(1000)*np.nan
+for i in range(len(y)):
+    y[i] = ft(t[i])
+
+print(y)
+                                
+plt.plot(t, y)
+plt.grid()
+plt.show(block=False)

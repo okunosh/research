@@ -1,0 +1,33 @@
+import numpy as np
+
+DEG2RAD = np.pi/180
+omega = 7.08e-5
+g = 3.72
+
+#condition
+alpha_deg = 0.42
+gamma = 4.5e-1
+Theta = 210
+Kmin, Kmax = 3, 100
+dn = 1
+
+def calc_stable_dt(dn, K_min, K_max):
+    dt_min = 0.5 * dn / K_max
+    dt_max = 0.5 * dn / K_min
+    return dt_min, dt_max
+
+
+def calc_dt(dn, alpha_deg, gamma, Theta, Kmin, Kmax):
+    alpha = alpha_deg * DEG2RAD
+    N = np.sqrt(gamma*g/Theta)
+    N_alpha = N*np.sin(alpha)
+    omega_plus = omega + N_alpha
+
+    dt_min, dt_max = calc_stable_dt(dn, K_min, K_max)
+    return 0
+
+if __name__ == "__main__":
+    dt_min, dt_max = calc_stable_dt(dn, K_min, K_max)
+    print("if K={}, dt need {}".format(K_min, dt_min))
+    
+          

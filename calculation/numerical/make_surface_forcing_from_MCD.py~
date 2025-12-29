@@ -1,0 +1,398 @@
+"""
+make_surface_forcing_from_MCD.py
+
+- MCD の ASCII テキスト (local time [h], surface temperature [K]) を読む
+- 0.1 s 刻みの theta_surf(time) を作る
+  - デフォルトでは、1日周期フーリエ級数で平滑化してからサンプリング
+- NetCDF として surface_forcing_from_MCD/ に保存
+  - ファイル名: <MCDテキストのベース名>_fourierN6.nc など
+- 平均からの偏差（温位偏差）の図を保存
+  - ファイル名: <MCDテキストのベース名>_fourierN6_theta_anomaly.png
+
+【重要】
+  - NetCDF に保存する変数 theta_surf(time) は
+    「日平均からの偏差（anomaly）」を保存する。
+  - global attributes に日平均値 theta_surf_mean / theta0_surface_mean を保存することで、
+    元の絶対温度（潜在温位）も再構成できる。
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Tuple
+
+import numpy as np
+import xarray as xr
+import matplotlib.pyplot as plt
+
+
+# ============================================================
+# 基本ユーティリティ
+# ============================================================
+
+
+def build_time_axis(sol_sec: float = 86400.0, dt: float = 0.1) -> np.ndarray:
+    """1 sol=sol_sec [s], 時間刻み dt [s] の time 配列を作る。"""
+    n = int(sol_sec / dt)
+    t = np.arange(n, dtype=float) * dt  # [s] 0 〜 sol_sec - dt
+    return t
+
+
+# ============================================================
+# MCD テキスト読み込み
+# ============================================================
+
+
+def load_lt_T_from_mcd_txt(path: str | Path) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    MCD の ASCII テキスト（ヘッダが # で始まり、その後 2 列の数値）の
+    ファイルから local time [h], Temperature [K] を読み込む。
+
+    データ部の例:
+        0.00000e+00    1.60371e+02
+        1.00000e+00    1.60349e+02
+        ...
+        2.40000e+01    1.60371e+02
+    """
+    path = Path(path)
+    lt_list: list[float] = []
+    T_list: list[float] = []
+
+    with path.open("r") as f:
+        for line in f:
+            s = line.strip()
+            # 空行・コメント行をスキップ
+            if not s or s.startswith("#"):
+                continue
+
+            parts = s.split()
+            if len(parts) < 2:
+                continue
+
+            try:
+                lt = float(parts[0])
+                T = float(parts[1])
+            except ValueError as e:
+                raise ValueError(f"数値に変換できない行があります: {line!r}") from e
+
+            lt_list.append(lt)
+            T_list.append(T)
+
+    if not lt_list:
+        raise ValueError(f"有効なデータ行が見つかりませんでした: {path}")
+
+    lt_hour = np.asarray(lt_list, dtype=float)   # [hour]
+    Tsurf = np.asarray(T_list, dtype=float)      # [K]
+    return lt_hour, Tsurf
+
+
+# ============================================================
+# フーリエ級数での平滑化 + 補間
+# ============================================================
+
+
+def fit_fourier_series(
+    lt_hour: np.ndarray,
+    Tsurf: np.ndarray,
+    n_harmonics: int = 6,
+):
+    """
+    1日周期(24h)のフーリエ級数で T(lt) をフィットする。
+
+    T(lt) ≈ a0
+            + Σ_{n=1..N} [ a_n cos(2πn lt/24) + b_n sin(2πn lt/24) ]
+
+    Returns
+    -------
+    model : callable
+        model(lt_hour_array) -> T(lt) を返す関数
+    """
+    lt_hour = np.asarray(lt_hour, dtype=float)
+    Tsurf = np.asarray(Tsurf, dtype=float)
+    omega = 2.0 * np.pi / 24.0
+    M = len(lt_hour)
+
+    cols = [np.ones(M)]
+    for n in range(1, n_harmonics + 1):
+        cols.append(np.cos(n * omega * lt_hour))
+        cols.append(np.sin(n * omega * lt_hour))
+    A = np.column_stack(cols)  # shape: (M, 1+2*N)
+
+    coeff, *_ = np.linalg.lstsq(A, Tsurf, rcond=None)
+
+    def model(t_hour: np.ndarray | float):
+        t_hour_arr = np.asarray(t_hour, dtype=float)
+        res = coeff[0] * np.ones_like(t_hour_arr)
+        idx = 1
+        for n in range(1, n_harmonics + 1):
+            res += coeff[idx] * np.cos(n * omega * t_hour_arr)
+            idx += 1
+            res += coeff[idx] * np.sin(n * omega * t_hour_arr)
+            idx += 1
+        return res
+
+    return model
+
+
+def interp_diurnal_to_01s(
+    lt_hour: np.ndarray,
+    Tsurf: np.ndarray,
+    sol_sec: float = 86400.0,
+    dt: float = 0.1,
+    method: str = "fourier",
+    n_harmonics: int = 6,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    MCD の (lt_hour, Tsurf_K) から 0.1 s 刻みの Tsurf(t) に補間する。
+
+    method:
+        "fourier" : 1日周期フーリエ級数で平滑化してからサンプリング（デフォルト）
+        "linear"  : 単純な線形補間（カクカクだが元値に忠実）
+    """
+    t_target = build_time_axis(sol_sec=sol_sec, dt=dt)
+
+    if method == "linear":
+        # LT[h] → 時間[s] (0〜sol_sec)
+        t_src = lt_hour / 24.0 * sol_sec
+        # 周期境界を滑らかにするため 1 周期分を 2 回並べる
+        t_src_ext = np.concatenate([t_src, t_src + sol_sec])
+        T_ext = np.concatenate([Tsurf, Tsurf])
+        T_interp = np.interp(t_target, t_src_ext, T_ext)
+
+    elif method == "fourier":
+        # 先に 1日周期フーリエ級数で滑らかな関数 T(lt) を作る
+        model = fit_fourier_series(lt_hour, Tsurf, n_harmonics=n_harmonics)
+        # time [s] → local time [hour]
+        lt_target = t_target / sol_sec * 24.0
+        T_interp = model(lt_target)
+
+    else:
+        raise ValueError(f"未知の method: {method}")
+
+    return t_target, T_interp
+
+
+# ============================================================
+# NetCDF 作成（theta_surf は「偏差」を保存）
+# ============================================================
+
+
+def create_surface_forcing_dataset_from_mcd(
+    lt_hour: np.ndarray,
+    Tsurf: np.ndarray,
+    sol_sec: float = 86400.0,
+    dt: float = 0.1,
+    var_name: str = "theta_surf",
+    interp_method: str = "fourier",
+    n_harmonics: int = 6,
+) -> tuple[xr.Dataset, np.ndarray, float]:
+    """
+    MCD テキストから読み込んだ (lt_hour, Tsurf) から
+    surface_forcing 用 Dataset を作る。
+
+    - time [s]: 0 〜 sol_sec-dt
+    - var_name(time): 「日平均からの偏差（anomaly）」を保存する
+      （元の絶対温度は global attr の日平均値を使えば復元できる）
+
+    Returns
+    -------
+    ds : xr.Dataset
+        theta_surf(time) が anomaly の Dataset
+    t_target : np.ndarray
+        time 軸 [s]
+    theta_mean : float
+        日平均の絶対値 [K]
+    """
+    t_target, T_interp_abs = interp_diurnal_to_01s(
+        lt_hour,
+        Tsurf,
+        sol_sec=sol_sec,
+        dt=dt,
+        method=interp_method,
+        n_harmonics=n_harmonics,
+    )
+
+    # 絶対値の平均（[K]）
+    theta_mean = float(T_interp_abs.mean())
+    # NetCDF に保存するのは「偏差」
+    theta_anom = T_interp_abs - theta_mean
+
+    mean_key = f"{var_name}_mean"  # "theta_surf_mean" を想定
+
+    ds = xr.Dataset(
+        coords={"time": ("time", t_target)},
+        data_vars={
+            var_name: ("time", theta_anom.astype(np.float64)),
+        },
+        attrs={
+            mean_key: theta_mean,                 # "theta_surf_mean"
+            "theta0_surface_mean": theta_mean,    # 旧コード互換用
+            "description": (
+                "surface potential temperature [K] from MCD "
+                f"(interp={interp_method}, n_harmonics={n_harmonics}); "
+                "variable stores deviation from daily mean, "
+                "mean value is stored in global attributes."
+            ),
+        },
+    )
+    ds[var_name].attrs["long_name"] = (
+        "surface potential temperature at surface (anomaly from daily mean)"
+    )
+    ds[var_name].attrs["units"] = "K"
+    ds[var_name].attrs["_FillValue"] = np.nan
+
+    return ds, t_target, theta_mean
+
+
+def save_surface_forcing_dataset(ds: xr.Dataset, output_nc_path: str | Path) -> None:
+    """surface_forcing Dataset を NetCDF として保存する。"""
+    out_path = Path(output_nc_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    ds.to_netcdf(out_path)
+
+    # 情報表示用に平均値を探す
+    theta_mean = None
+    for key in ("theta_surf_mean", "theta0_surface_mean"):
+        if key in ds.attrs:
+            theta_mean = float(ds.attrs[key])
+            break
+
+    print(f"[INFO] Wrote new surface forcing to: {out_path}")
+    if theta_mean is not None:
+        print(f"[INFO] mean surface potential temperature = {theta_mean:.3f} K")
+
+
+# ============================================================
+# 図の作成（補間＋MCD raw の両方を「偏差」で描画）
+# ============================================================
+
+
+def plot_surface_forcing_with_raw(
+    lt_hour: np.ndarray,
+    Tsurf: np.ndarray,
+    t_target: np.ndarray,
+    theta_anom_interp: np.ndarray,
+    theta_mean: float,
+    sol_sec: float,
+    output_png_path: str | Path,
+) -> None:
+    """
+    MCD の元データ（raw）と、補間後の時系列を
+    どちらも「日平均からの偏差」として描画する。
+
+    - 横軸: Local time [hour]
+    - 縦軸: θ̄(0,t) [K] （平均からの偏差）
+    - 線: 補間結果 "Interpolated"
+    - 点: MCD 生データ "MCD (raw)"
+    """
+    # raw データの偏差
+    theta_raw_anom = Tsurf - theta_mean
+
+    # 時間 → 地方時 [hour]
+    lt_interp = t_target / sol_sec * 24.0
+
+    fig, ax = plt.subplots(figsize=(6, 4))
+    ax.plot(lt_interp, theta_anom_interp, label="Interpolated")
+    ax.plot(lt_hour, theta_raw_anom, "o", label="MCD (raw)")
+
+    ax.set_xlim(0.0, 24.0)
+    ax.set_xticks(np.arange(0, 25, 6))
+    ax.set_xlabel("Local time (hour)")
+    ax.set_ylabel(r"$\bar{\theta}(0,t)$ [K]")
+    ax.set_title("Surface forcing")
+    ax.grid(True, linestyle="--", alpha=0.5)
+    ax.legend()
+
+    out_png = Path(output_png_path)
+    out_png.parent.mkdir(parents=True, exist_ok=True)
+    fig.tight_layout()
+    fig.savefig(out_png, dpi=150)
+    plt.close(fig)
+
+    print(f"[INFO] Saved forcing plot to: {out_png}")
+
+
+# ============================================================
+# 一括実行用（他ファイルから import して呼んでもOK）
+# ============================================================
+
+
+def generate_surface_forcing_from_mcd(
+    mcd_txt_path: str | Path,
+    output_nc_path: str | Path,
+    output_png_path: str | Path,
+    sol_sec: float = 86400.0,
+    dt: float = 0.1,
+    var_name: str = "theta_surf",
+    interp_method: str = "fourier",
+    n_harmonics: int = 6,
+) -> None:
+    """
+    1) MCD テキスト → surface_forcing Dataset 作成（theta_surf = anomaly）
+    2) NetCDF 保存
+    3) 補間＋MCD raw の偏差の図を保存
+
+    という一連の処理をまとめた関数。
+
+    他のスクリプト（make_surface_forcing_and_K_from_MCD.py など）から
+    import して使うことを想定している。
+    """
+    # まず MCD テキストを読み込む
+    lt_hour, Tsurf = load_lt_T_from_mcd_txt(mcd_txt_path)
+
+    # Dataset を作成（内部で補間も実施）
+    ds, t_target, theta_mean = create_surface_forcing_dataset_from_mcd(
+        lt_hour=lt_hour,
+        Tsurf=Tsurf,
+        sol_sec=sol_sec,
+        dt=dt,
+        var_name=var_name,
+        interp_method=interp_method,
+        n_harmonics=n_harmonics,
+    )
+
+    # NetCDF として保存
+    save_surface_forcing_dataset(ds, output_nc_path=output_nc_path)
+
+    # 図を作成（補間 + MCD raw の偏差）
+    theta_anom_interp = ds[var_name].to_numpy().astype(float)
+    plot_surface_forcing_with_raw(
+        lt_hour=lt_hour,
+        Tsurf=Tsurf,
+        t_target=t_target,
+        theta_anom_interp=theta_anom_interp,
+        theta_mean=theta_mean,
+        sol_sec=sol_sec,
+        output_png_path=output_png_path,
+    )
+
+
+# ============================================================
+# スクリプトとして直接実行されたとき
+# ============================================================
+
+
+if __name__ == "__main__":
+    # 入力 MCD データ: MCDdata/ 以下に配置
+    mcd_txt_path = Path("MCDdata") / "Ls90_Lat30_Lon260_Alt0.txt"
+
+    # 出力先: surface_forcing_from_MCD/ 以下
+    base_dir = Path("surface_forcing_from_MCD")
+    stem = mcd_txt_path.stem  # 例: "Ls90_Lat0_Lon260_Alt0"
+    method = "fourier"
+    n_harm = 6
+
+    method_suffix = f"_{method}N{n_harm}" if method == "fourier" else f"_{method}"
+    output_nc_path = base_dir / f"{stem}{method_suffix}.nc"
+    output_png_path = base_dir / f"{stem}{method_suffix}_theta_anomaly.png"
+
+    generate_surface_forcing_from_mcd(
+        mcd_txt_path=str(mcd_txt_path),
+        output_nc_path=str(output_nc_path),
+        output_png_path=str(output_png_path),
+        sol_sec=86400.0,
+        dt=0.1,
+        var_name="theta_surf",
+        interp_method=method,   # "linear" にすればカクカク版
+        n_harmonics=n_harm,
+    )

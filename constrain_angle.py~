@@ -1,0 +1,35 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+
+def alpha(theta, gamma):
+    #Mars
+    #g = 3.72
+    #omega = 7.08e-5
+
+    #Earth
+    g = 9.81
+    omega = 7.27e-5
+
+
+    rad2deg = 180 / np.pi
+
+    return  np.arcsin(omega * (theta / g / gamma) **0.5) * rad2deg
+    
+gamma = np.linspace(9.e-3, 3.e-1, 1000)
+#gamma = np.linspace(9.e-3, 9.e-1, 1000)
+gamma = np.linspace(9.e-4, 1.e-2, 1000)
+thetas = [213, 243]#, 243, 263]
+thetas = [288]
+
+for i in range(len(thetas)):
+    alphas = alpha(thetas[i], gamma)
+    plt.plot(gamma, alphas, label=r'$\theta_0$ = '+str(thetas[i]))
+    
+#plt.vlines(4.5e-3, 0, 0.8, linestyle='--', color='black',  label=r'$\Gamma_d$')
+plt.xlabel(r'$\gamma$ [K /m]')
+plt.ylabel(r'$\alpha$ [degree]')
+plt.title('Critical')
+plt.grid()
+plt.legend()
+plt.show()

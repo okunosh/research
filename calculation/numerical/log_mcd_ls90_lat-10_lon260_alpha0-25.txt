@@ -1,0 +1,89 @@
+nohup: 入力を無視します
+MoTTY X11 proxy: Authorisation not recognised
+
+[36mIn case you are trying to start a graphical application with "sudo", read this article in order to avoid this issue:
+[35m[4mhttps://blog.mobatek.net/post/how-to-keep-X11-display-after-su-or-sudo/[0m
+
+posx and posy should be finite values
+posx and posy should be finite values
+/d5/d5a/user/2026M_okuno/slope_wind/calculation/numerical/data-analysis/visualization/plot_momentumMixing.py:612: UserWarning: This figure was using constrained_layout, but that is incompatible with subplots_adjust and/or tight_layout; disabling constrained_layout.
+  fig.tight_layout()
+/d5/d5a/user/2026M_okuno/slope_wind/calculation/numerical/data-analysis/visualization/plot_momentumMixing.py:430: UserWarning: The input coordinates to pcolormesh are interpreted as cell centers, but are not monotonically increasing or decreasing. This may lead to incorrectly calculated cell edges, in which case, please supply explicit cell edges to pcolormesh.
+  m = ax.pcolormesh(X, Z, U_last, cmap=cmap, norm=norm, shading="auto")
+[info] using g = 3.71 m s^-2
+[saved] output/mcd_ls90_lat-10_Lon260/Mars/20251202T003147_SubCritical_num261_alp0-25_gamma4-02_dt0.1/Ri_analysis_summary.png
+[Ri debug] min = -6.26e+04, max = 1.75e+05
+[Ri debug] fraction(0 < Ri < 0.25) = 0.050
+13 [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+plot_mixed_u_like_reference
+[done] Outputs saved under: output/mcd_ls90_lat-10_Lon260/Mars/20251202T003147_SubCritical_num261_alp0-25_gamma4-02_dt0.1
+/d5/d5a/user/2026M_okuno/slope_wind/calculation/analytical/Zardi2014_def.py:31: RuntimeWarning: invalid value encountered in sqrt
+  self.l_minus = np.sqrt(2 * K / self.omega_minus)
+/d5/d5a/user/2026M_okuno/slope_wind/calculation/numerical/simulation_def.py:186: RuntimeWarning: invalid value encountered in sqrt
+  self.l_minus = np.sqrt(2 * self.K / self.omega_minus)
+/d5/d5a/user/2026M_okuno/slope_wind/calculation/numerical/simulation_def.py:186: RuntimeWarning: invalid value encountered in sqrt
+  self.l_minus = np.sqrt(2 * self.K / self.omega_minus)
+[INFO] Using parameter file: params/mcd_ls90_lat-10_lon260_alpha0-25.py
+
+[INFO] Final parameters used for this run:
+planet: Mars
+g: 3.72
+omega: 7.077651711832821e-05
+K: None
+Ls: Ls90
+gamma: 0.00402
+Theta: 100.0
+num: 260
+dt: 0.1
+surface_temp: surface_forcing_from_MCD/Ls90_Lat-10_Lon260_Alt0_fourierN6.nc
+K_file: K_MCD/Ls90_Lat-10_Lon260_Alt0_fourierN6.nc
+alpha_deg: 0.25
+theta_0: 206.12699999999998
+output_path: output/mcd_ls90_lat-10_Lon260
+run_id: mcd_ls90_lat-10_Lon260
+case_name: mcd_Ls90
+
+(261,) (97,) (261, 97) (261, 97) (261, 97)
+t.shape:  (25317,)
+(1, 25317)
+
+allDay Fig is saved!
+-----
+altitudes:  (1, 6525)
+t_4th_day:  (1, 6525)
+u_bars_4th_day:  (1, 6525)
+theta_bars_4th_day:  (1, 6525)
+K:  (864000,)
+-----
+u最大値: 21.0（t=19, altitude=894.424）
+u最小値: -19.4（t=9, altitude=1548.71）
+theta最大値: 78.1（t=13, altitude=0）
+theta最小値: -50.5（t=4, altitude=0）
+t_4th_day.shape: (1, 6525)
+altitudes.shape:  (1, 6525)
+4th Day Fig is saved!
+##Upslope
+----------
+g [m/s^2]:  3.72
+theta_surf at umax [K]:  211.67116699236306
+theta_z at umax [K]: 249.55663254862205
+theta mean between two altitudes [K]:  230.61389977049254
+z at umax [m]:  894.423915254083
+umax [m/s]:  21.04169086853217
+Richardson Number:  1.234560050742783
+----------
+##Downslope
+----------
+g [m/s^2]:  3.72
+theta_surf at umax [K]:  269.4279164718404
+theta_z at umax [K]: 220.12684974157168
+theta mean between two altitudes [K]:  244.77738310670603
+z at umax [m]:  1548.7087980600368
+umax [m/s]:  -19.374590352484244
+Richardson Number:  -3.0912396600293293
+----------
+===
+u_min_idx:  2405
+u_min(LT, z):  (261,)
+altitudes(LT):  (261,)
+[INFO] Running last-day analysis for: output/mcd_ls90_lat-10_Lon260/Mars/20251202T003147_SubCritical_num261_alp0-25_gamma4-02_dt0.1

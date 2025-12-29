@@ -1,0 +1,10 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+n = np.linspace(0, 2000, 10000)
+
+theta = np.exp(n / 10) + 192
+
+plt.plot(n, theta)
+plt.grid()
+plt.shlw()

@@ -1,0 +1,65 @@
+import xarray as xr
+import matplotlib.pyplot as plt
+import os
+
+# 読み込みたいファイルのリストを作成
+file_names = [
+    "results/2024-10-30_t=0.nc",
+    "results/2024-10-30_t=10800.nc",
+    "results/2024-10-30_t=14400.nc",
+    "results/2024-10-30_t=18000.nc",
+    "results/2024-10-30_t=21600.nc",
+    "results/2024-10-30_t=25200.nc",
+    "results/2024-10-30_t=28800.nc",
+    "results/2024-10-30_t=32400.nc",
+    "results/2024-10-30_t=3600.nc",
+    "results/2024-10-30_t=36000.nc",
+    "results/2024-10-30_t=39600.nc",
+    "results/2024-10-30_t=43200.nc",
+    "results/2024-10-30_t=7200.nc"
+]
+
+# file_names = [
+#     "results/2024-10-30_t=0.nc",
+#     "results/2024-10-30_t=10800.nc",
+#     "results/2024-10-30_t=21600.nc",
+#     "results/2024-10-30_t=32400.nc",
+#     "results/2024-10-30_t=43200.nc"
+# ]
+
+file_names.sort(key=lambda x: int(x.split('_t=')[1].split('.nc')[0]))
+
+# サブプロットを2個作成
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+
+# uのプロファイルを描画
+for file_name in file_names:
+    ds = xr.open_dataset(file_name)
+    u = ds['u']
+    altitude = ds['altitude']
+    
+    ax1.plot(u, altitude, label=f't={ds["time"].values[0]/3600}')
+
+ax1.set_xlabel(r'$\overline{u}$ [m/s]')
+ax1.set_ylabel('Altitude [m]')
+ax1.set_title(r'$\overline{u}$ Profile')
+ax1.legend()
+ax1.grid(True)
+
+# thetaのプロファイルを描画
+for file_name in file_names:
+    ds = xr.open_dataset(file_name)
+    theta = ds['theta']
+    altitude = ds['altitude']
+    
+    ax2.plot(theta, altitude, label=f't={ds["time"].values[0]/3600}')
+
+ax2.set_xlabel(r'$\overline{\theta}$ [K]')
+ax2.set_ylabel('Altitude [m]')
+ax2.set_title(r'$\overline{\theta}$ Profile')
+ax2.legend()
+ax2.grid(True)
+
+plt.tight_layout()
+plt.show()
+

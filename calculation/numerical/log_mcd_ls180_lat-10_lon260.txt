@@ -1,0 +1,17 @@
+nohup: 入力を無視します
+Traceback (most recent call last):
+  File "numerical_sim_exec.py", line 7, in <module>
+    import xarray as xr
+  File "/usr/local/lib/python3.8/dist-packages/xarray/__init__.py", line 1, in <module>
+    from xarray import testing, tutorial
+  File "/usr/local/lib/python3.8/dist-packages/xarray/testing.py", line 10, in <module>
+    from xarray.core.dataarray import DataArray
+  File "/usr/local/lib/python3.8/dist-packages/xarray/core/dataarray.py", line 38, in <module>
+    from xarray.core.dataset import Dataset
+  File "<frozen importlib._bootstrap>", line 991, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 975, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 671, in _load_unlocked
+  File "<frozen importlib._bootstrap_external>", line 844, in exec_module
+  File "<frozen importlib._bootstrap_external>", line 939, in get_code
+  File "<frozen importlib._bootstrap_external>", line 1038, in get_data
+KeyboardInterrupt

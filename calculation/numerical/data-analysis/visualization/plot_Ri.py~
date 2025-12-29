@@ -1,0 +1,321 @@
+# ===== gradients_and_ri.py =====
+from pathlib import Path
+from typing import Dict, Tuple, Optional
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.colors import TwoSlopeNorm
+from datetime import timedelta
+
+from visualization.last_day_plotters import _to_lt_hours, _centers_to_edges
+
+SEC_PER_HOUR = float(timedelta(hours=1).total_seconds())
+
+def compute_vertical_gradients_and_ri(
+    reshaped_stacked: Dict[str, np.ndarray],
+    *,
+    g: float,
+    eps: float = 1e-8,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """
+    最後の1日分について、鉛直微分と Richardson 数を計算。
+    返り値: (du_dz, dtheta_dz, Ri, z_mid, t_mid, theta_mid)
+      形状はいずれも (nt_last, nz-1)（セル間の値）
+    """
+    t   = np.asarray(reshaped_stacked["time"])             # (nt,)
+    z   = np.asarray(reshaped_stacked["altitude"])         # (nt,nz) or (nz,)
+    u   = np.asarray(reshaped_stacked["u_bar"])            # (nt,nz)
+    thb = np.asarray(reshaped_stacked["theta_bar"])        # (nt,nz)
+    gam = np.asarray(reshaped_stacked["gamma"])            # (nt,nz) or (nz,) or (1,)
+    th0 = float(np.asarray(reshaped_stacked["theta_0"])[0])# scalar baseline θ0
+
+
+    # --- 最後の1日だけ切り出し用の準備（t_full はマスク前の全時刻） ---
+    t_full = np.asarray(reshaped_stacked["time"])        # (nt_full,)
+    period = 86400.0
+    t_end  = float(t_full[-1])
+    mask   = (t_full > (t_end - period))                 # 最後の1日マスク
+    
+    # ここで t, u, thb を切り出して nt_last, nz を決める
+    t   = t_full[mask]                                   # (nt_last,)
+    u   = np.asarray(reshaped_stacked["u_bar"])[mask, :] # (nt_last, nz)
+    thb = np.asarray(reshaped_stacked["theta_bar"])[mask, :]  # (nt_last, nz)
+    nt_last, nz = u.shape
+    
+    # z, gamma を (nt_last, nz) に揃える（時間依存・非依存どちらも対応）
+    z_raw   = np.asarray(reshaped_stacked["altitude"])
+    gam_raw = np.asarray(reshaped_stacked["gamma"])
+
+    """
+    def _time_align_to_nt_nz(arr: np.ndarray) -> np.ndarray:
+        # 2D: (nt, nz) のはず
+        if arr.ndim == 2:
+            if arr.shape[0] == t_full.size and arr.shape[1] == nz:
+                return arr[mask, :]                       # 元の全時刻に対してマスク適用
+            if arr.shape[0] == nt_last and arr.shape[1] == nz:
+                return arr                                 # 既に最後の1日分
+            if arr.shape[0] == 1 and arr.shape[1] == nz:
+                return np.broadcast_to(arr, (nt_last, nz)) # 時間一定の2D（1×nz）を複製
+            raise ValueError(f"形状不整合: {arr.shape} -> (nt_last={nt_last}, nz={nz})")
+        # 1D: (nz,) の鉛直一定（時間に依らず）
+        if arr.ndim == 1 and arr.size == nz:
+            return np.broadcast_to(arr[None, :], (nt_last, nz))
+        # 0D: スカラー
+        if arr.ndim == 0:
+            return np.full((nt_last, nz), float(arr))
+        raise ValueError(f"扱えない形状: {arr.shape}")
+"""
+        def _time_align_to_nt_nz(arr: np.ndarray) -> np.ndarray:
+            """
+            任意の形状の配列 arr を、(nt_last, nz) に揃えるヘルパー。
+            
+            想定しているパターン：
+            - 2D: (nt_full, nz)  … 全期間×高度
+            - 2D: (nt_last, nz)  … 最後の1日×高度
+            - 2D: (1, nz)        … 時間一定の高度プロファイル
+            - 1D: (nz,)          … 高度のみ（時間一定）
+            - 1D: (nt_full,)     … 時間のみ（全期間、鉛直一様）
+            - 1D: (nt_last,)     … 時間のみ（最後の1日、鉛直一様）
+            - 0D: スカラー       … 時間×高度とも一定
+            """
+            # 2D: (nt, nz) のはず
+            if arr.ndim == 2:
+                if arr.shape[0] == t_full.size and arr.shape[1] == nz:
+                    # 全期間 nt_full × nz → 最後の1日だけマスク
+                    return arr[mask, :]
+                if arr.shape[0] == nt_last and arr.shape[1] == nz:
+                    # 既に最後の1日分
+                    return arr
+                if arr.shape[0] == 1 and arr.shape[1] == nz:
+                    # 時間一定の 1×nz → nt_last×nz にブロードキャスト
+                    return np.broadcast_to(arr, (nt_last, nz))
+                raise ValueError(f"形状不整合: {arr.shape} -> (nt_last={nt_last}, nz={nz})")
+
+            # 1D: 高度だけ（nz,） → 時間方向に複製
+            if arr.ndim == 1 and arr.size == nz:
+                return np.broadcast_to(arr[None, :], (nt_last, nz))
+            
+            # 1D: 時間だけ（nt_full,） → 最後の1日でマスクしてから高度方向に複製
+            if arr.ndim == 1 and arr.size == t_full.size:
+                arr_last = arr[mask]  # (nt_last,)
+                return np.broadcast_to(arr_last[:, None], (nt_last, nz))
+
+            # 1D: 時間だけ（nt_last,） → そのまま高度方向に複製
+            if arr.ndim == 1 and arr.size == nt_last:
+                return np.broadcast_to(arr[:, None], (nt_last, nz))
+
+            # 0D: スカラー → 全セル同じ値
+            if arr.ndim == 0:
+                return np.full((nt_last, nz), float(arr))
+            
+            # それ以外は想定外
+            raise ValueError(f"扱えない形状: {arr.shape}")
+
+    
+    z   = _time_align_to_nt_nz(z_raw)     # (nt_last, nz)
+    gam = _time_align_to_nt_nz(gam_raw)   # (nt_last, nz)
+
+    
+    # 絶対温位 θ = θ0 + γ z + θ̄
+    theta = th0 + gam * z + thb                          # (nt_last, nz)
+
+    # --- 鉛直差分（上-下）/ Δz：時間ごとに z 方向差分 ---
+    dz   = np.diff(z,    axis=1)                         # (nt_last, nz-1)
+    du   = np.diff(u,    axis=1)                         # (nt_last, nz-1)
+    dthb = np.diff(thb,  axis=1)                         # (nt_last, nz-1)
+
+    du_dz     = du / (dz + eps)                          # (nt_last, nz-1)
+    dtheta_dz = dthb / (dz + eps) + 0.5*(gam[:,1:] + gam[:,:-1])  # γ をセル間平均で加算
+
+    # セル間中央の z, t, θ
+    z_mid     = 0.5 * (z[:,1:] + z[:,:-1])              # (nt_last, nz-1)
+    t_mid     = np.broadcast_to(t[:,None], z_mid.shape) # (nt_last, nz-1)
+    theta_mid = 0.5 * (theta[:,1:] + theta[:,:-1])      # (nt_last, nz-1)
+
+    # --- Richardson number: Ri = (g/θ) * (∂θ/∂z) / (∂u/∂z)^2
+    Ri = (g / (theta_mid + eps)) * dtheta_dz / (du_dz**2 + eps)
+
+    return du_dz, dtheta_dz, Ri, z_mid, t_mid, theta_mid
+
+
+def plot_last_day_gradients_and_ri(
+    reshaped_stacked,
+    results,                     # (du_dz, dtheta_dz, Ri, z_mid, t_mid, theta_mid)
+    *,
+    out_dir: str,
+    sec_per_hour: float = None,  # Noneなら自動で計算（3600秒/時）
+    cmap_grad: str = "bwr",
+    cmap_ri: str = "bwr",
+    vlim_grad: float = None,                 # 例: 0.05 → [-0.05, 0, +0.05]
+    ri_range: tuple = None,                  # (vmin, vcenter, vmax) 例: (-4, 0.25, 4)
+    ri_threshold: float = 0.25,              # 強調しきい値（上限）
+    show_ri_contour: bool = True,            # 段付き境界（セル中心の0/1マスクの0.5等値線）
+    show_ri_mask: bool = True,               # 0<Ri<0.25 の半透明グレーマスク
+) -> None:
+    """
+    du/dz, dθ/dz, Ri を “最後の1日” の LT[hour] × z で pcolormesh 描画・保存。
+    保存: out_dir/{du_dz.png, dtheta_dz.png, Ri.png}
+
+    - 勾配2種は TwoSlopeNorm(center=0) を共有。
+    - Ri 図は TwoSlopeNorm(center=0.25)。0<Ri<0.25 を薄いグレーでハイライト。
+    - 等値線は 0/1 マスクの 0.5 レベルをセル中心格子上で引き、pcolormesh のセル境界と整合。
+    """
+    from pathlib import Path
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import TwoSlopeNorm
+    from datetime import timedelta
+
+    Path(out_dir).mkdir(parents=True, exist_ok=True)
+
+    # 秒/時：外から渡されなければ定数 or timedelta から取得（直値3600は使わない）
+    if sec_per_hour is None:
+        try:
+            sec_per_hour = float(SEC_PER_HOUR)  # 他所で定義済みなら使う
+        except NameError:
+            sec_per_hour = float(timedelta(hours=1).total_seconds())
+
+    du_dz, dtheta_dz, Ri, z_mid, t_mid, _theta_mid = results
+
+    # --- 時間軸（最後の1日→LT[hour]→昇順ソート→エッジ化）
+    t_full = np.asarray(reshaped_stacked["time"], dtype=float)
+    mask_last = (t_full > (float(t_full[-1]) - 24.0 * sec_per_hour))
+    t_last_hours = t_full[mask_last] / sec_per_hour                 # (nt_last,) [hour]
+    t_centers = _to_lt_hours(t_last_hours)                          # 024
+    sort_idx = np.argsort(t_centers)
+    t_edges  = _centers_to_edges(t_centers[sort_idx])               # (nt_last+1,)
+
+    # --- z 軸（時間平均で 1D 代表格子→エッジ化）
+    z_centers = np.nanmean(z_mid[sort_idx, :], axis=0)              # (nz-1,)
+    z_edges   = _centers_to_edges(z_centers)                        # (nz,)
+
+    # --- 共通プロッタ（勾配2種）
+    def _plot_one(A2d, *, save_name, title, units, cmap, norm=None):
+        A_sorted = A2d[sort_idx, :].T                               # (nz-1, nt_last)
+        fig, ax = plt.subplots(1, 1, figsize=(10, 4))
+        m = ax.pcolormesh(t_edges, z_edges, A_sorted, cmap=cmap, shading="auto", norm=norm)
+        cb = fig.colorbar(m, ax=ax, fraction=0.045, pad=0.04)
+        if units:
+            cb.set_label(units)
+        ax.set_xlabel("Local time [hour]")
+        ax.set_ylabel("Altitude [m]")
+        ax.set_title(title)
+        ax.grid(True)
+        fig.savefig(str(Path(out_dir, save_name)), dpi=300, bbox_inches="tight", pad_inches=0.05)
+        plt.close(fig)
+
+    # --- 勾配のカラーノルム（共通） ---
+    if vlim_grad is not None:
+        vmax_abs = abs(vlim_grad)
+        norm_grad = TwoSlopeNorm(vmin=-vmax_abs, vcenter=0.0, vmax=vmax_abs)
+    else:
+        vmax_auto = np.nanmax(np.abs(np.concatenate([du_dz.ravel(), dtheta_dz.ravel()])))
+        norm_grad = TwoSlopeNorm(vmin=-vmax_auto, vcenter=0.0, vmax=vmax_auto)
+
+    _plot_one(
+        du_dz,
+        save_name="du_dz.png",
+        title="Vertical Wind Shear ∂u/∂z [s$^{-1}$]",
+        units="s$^{-1}$",
+        cmap=cmap_grad,
+        norm=norm_grad,
+    )
+    _plot_one(
+        dtheta_dz,
+        save_name="dtheta_dz.png",
+        title="Potential Temperature Gradient ∂θ/∂z [K m$^{-1}$]",
+        units="K m$^{-1}$",
+        cmap=cmap_grad,
+        norm=norm_grad,
+    )
+
+    # --- Richardson 数（0 < Ri < 0.25 を薄いグレーで強調、格子整合の段付き境界） ---
+    A_sorted_Ri = Ri[sort_idx, :].T                                   # (nz-1, nt_last)
+
+    # ノルム設定（中心 0.25）
+    if ri_range is not None:
+        vmin_ri, vc_ri, vmax_ri = ri_range
+        norm_ri = TwoSlopeNorm(vmin=vmin_ri, vcenter=vc_ri, vmax=vmax_ri)
+    else:
+        norm_ri = TwoSlopeNorm(vmin=-4.0, vcenter=ri_threshold, vmax=4.0)
+
+    fig, ax = plt.subplots(1, 1, figsize=(10, 4))
+    m = ax.pcolormesh(t_edges, z_edges, A_sorted_Ri, cmap=cmap_ri, shading="auto", norm=norm_ri)
+    cb = fig.colorbar(m, ax=ax, fraction=0.045, pad=0.04)
+
+    # カラーバーに 0.25 を必ず刻む
+    ticks = list(cb.get_ticks())
+    if ri_threshold not in ticks:
+        ticks.append(ri_threshold)
+        ticks = sorted(ticks)
+    cb.set_ticks(ticks)
+    cb.set_ticklabels([("0.25" if np.isclose(t, ri_threshold) else f"{t:g}") for t in ticks])
+
+    # 0 < Ri < 0.25 のみ半透明グレーでハイライト（控えめ）
+    if show_ri_mask:
+        ri_low_mask = (A_sorted_Ri > 0.0) & (A_sorted_Ri < ri_threshold)
+        ax.pcolormesh(
+            t_edges, z_edges, ri_low_mask.astype(float),
+            shading="auto", cmap="Greys", vmin=0, vmax=1, alpha=0.15, zorder=4
+        )
+
+    # 段付き境界：セル中心の 0/1 マスクの 0.5 等値線（pcolormesh のセル境界と整合）
+    if show_ri_contour:
+        x_centers = t_edges[:-1] + 0.5 * np.diff(t_edges)             # (= t_centers[sort_idx])
+        y_centers = z_edges[:-1] + 0.5 * np.diff(z_edges)             # (= z_centers)
+        ri_low_mask = (A_sorted_Ri > 0.0) & (A_sorted_Ri < ri_threshold)
+        cs = ax.contour(
+            x_centers, y_centers, ri_low_mask.astype(float), levels=[0.5],
+            colors="k", linewidths=1.1, corner_mask=False, zorder=5,
+        )
+        try:
+            ax.clabel(cs, fmt={0.5: "Ri=0.25"}, inline=True, fontsize=9)
+        except Exception:
+            pass  # 等値線が出ないケースでも安全にスキップ
+
+    ax.set_xlabel("Local time [hour]")
+    ax.set_ylabel("Altitude [m]")
+    ax.set_title("Gradient Richardson Number Ri (highlight: 0 < Ri < 0.25)")
+    ax.grid(True)
+    fig.savefig(str(Path(out_dir, "Ri.png")), dpi=300, bbox_inches="tight", pad_inches=0.05)
+    plt.close(fig)
+
+
+
+    
+
+if __name__ == "__main__":
+
+    import argparse
+    import os
+    from visualization.common.io_utils import load_all_data, read_global_attr_values, stack_by_variable, convert_to_standard_shapes
+    
+    parser = argparse.ArgumentParser(description='Plot u_bar and theta_bar from NetCDF files in a directory.')
+    parser.add_argument('directory', type=str, help='Directory containing NetCDF files')
+    args = parser.parse_args()
+
+    varnames = ["u_bar", "theta_bar", "altitude", "time", "K", "theta_0", "gamma"]
+    attrs_names = ["g"]
+    
+    data_list = load_all_data(args.directory, varnames)
+    stacked = stack_by_variable(data_list, varnames)
+    reshaped_stacked = convert_to_standard_shapes(stacked)
+
+    attr_dic = read_global_attr_values(args.directory, attrs_names)
+    
+    # 計算
+    du_dz, dtheta_dz, Ri, z_mid, t_mid, theta_mid = compute_vertical_gradients_and_ri(
+        reshaped_stacked,
+        g=float(attr_dic["g"])
+    )
+
+    # 描画（3枚保存）
+    plot_last_day_gradients_and_ri(
+        reshaped_stacked,
+        (du_dz, dtheta_dz, Ri, z_mid, t_mid, theta_mid),
+        out_dir=args.directory,
+        vlim_grad=0.05,          # 例：±0.05 固定（省略可）
+        ri_range=(-4, 0.25, 4),  # 例：旧実装どおり（省略可）
+    )
+
+
+    

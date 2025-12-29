@@ -1,0 +1,267 @@
+from __future__ import annotations
+import argparse
+from pathlib import Path
+from typing import Dict, Tuple, Optional
+
+import numpy as np
+
+# ---- IO 共通 ----
+from visualization.common.io_utils import (
+    load_all_data,
+    stack_by_variable,
+    convert_to_standard_shapes,
+    read_global_attr_values,
+)
+
+# ---- 物理量計算 ----
+from visualization.pressure_t_alt_map import (
+    calc_pressure,
+    calc_temperature,
+    calc_density,
+)
+
+# ---- Ri & 勾配 ----
+from visualization.plot_Ri import (
+    compute_vertical_gradients_and_ri,
+    plot_last_day_gradients_and_ri,
+)
+
+# ---- 混合関連 ----
+from visualization.plot_momentumMixing import (
+    prepare_last_day_inputs,
+    apply_momentum_mixing_last_day,
+    plot_mixing_results_pcolormesh,
+    plot_before_after_profiles,
+    plot_before_after_wind_profiles,
+    plot_near_surface_wind_timeseries,
+)
+
+# ---- 時間変換（LT） ----
+from visualization.last_day_plotters import _to_lt_hours
+
+
+SEC_PER_HOUR = 3600.0
+
+
+def _save_near_surface_timeseries(
+    prepared: Dict[str, np.ndarray],
+    u_mixed: np.ndarray,
+    level_index: int,
+    out_path: Path,
+) -> None:
+    """
+    地表付近（指定レベル）の風速タイムシリーズを CSV で保存する。
+    列: LT_hour, u_before, u_after
+    """
+    t_last = np.asarray(prepared["time"], dtype=float)  # [s]
+    u_last = np.asarray(prepared["u"], dtype=float)
+
+    nt_last, nz = u_last.shape
+    j = int(level_index)
+    if j < 0 or j >= nz:
+        j = 0  # はみ出したら最下層にフォールバック
+
+    if u_mixed.shape != (nt_last, nz):
+        raise ValueError(
+            f"u_mixed shape {u_mixed.shape} does not match last-day shape {(nt_last, nz)}"
+        )
+
+    # 秒 → 時間 → LT[hour]
+    lt = _to_lt_hours(t_last / SEC_PER_HOUR)
+    order = np.argsort(lt)
+
+    lt_sorted = lt[order]
+    u_before = u_last[order, j]
+    u_after = u_mixed[order, j]
+
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    data = np.column_stack([lt_sorted, u_before, u_after])
+    header = "LT_hour,u_before,u_after"
+    np.savetxt(out_path, data, delimiter=",", header=header, comments="")
+
+
+def run_lastday_analysis_for_case(
+    case_dir: Path,
+    *,
+    out_root: Path | None = None,
+    level_index: int = 0,
+    ri_upper: float = 0.25,
+    require_positive: bool = False,
+) -> None:
+    """
+    1ケース分のNetCDF群（4日×1時間刻み）から:
+
+      1. du/dz, dθ/dz, Ri の「最後の1日」マップを描画
+      2. Ri<ri_upper の層を鉛直混合して、運動量・風速のマップとプロファイル図を作成
+      3. 地表付近の風速タイムシリーズ（混合前/後）を PNG + CSV で保存
+
+    Parameters
+    ----------
+    case_dir : Path
+        例:
+        output/mcd_ls180_lat-10_Lon260/Mars/20251128T194733_SuperCritical_num261_alp30-0_gamma2-41_dt0.1
+    out_root : Path or None
+        解析結果を保存するルートディレクトリ。
+        None の場合は case_dir 直下に 'analysis_lastday' を作る。
+    level_index : int
+        near-surface とみなす鉛直レベル index (0 = 最下層).
+    ri_upper : float
+        混合のしきい値 Ri<ri_upper.
+    require_positive : bool
+        True のとき Ri>0 かつ Ri<ri_upper を満たす場合のみ混合。
+    """
+    case_dir = Path(case_dir)
+    if out_root is None:
+        out_root = case_dir / "analysis_lastday"
+    out_root = Path(out_root)
+    out_root.mkdir(parents=True, exist_ok=True)
+
+    # ---------- 1. NetCDF を読み込み ----------
+    varnames = ["u_bar", "theta_bar", "altitude", "time", "K", "theta_0", "gamma"]
+    attrs_names = ["g"]
+
+    data_list = load_all_data(str(case_dir), varnames)
+    stacked = stack_by_variable(data_list, varnames)
+    reshaped = convert_to_standard_shapes(stacked)
+    attrs = read_global_attr_values(str(case_dir), attrs_names)
+
+    # --- ★ ここで gamma が 1D(time) なら (nt, nz) に拡張する ★ ---
+    if "gamma" in reshaped:
+        gamma = np.asarray(reshaped["gamma"])
+        time_arr = np.asarray(reshaped["time"])
+        u_arr = np.asarray(reshaped["u_bar"])
+        if gamma.ndim == 1:
+            nt_full = time_arr.shape[0]
+            nz = u_arr.shape[1]
+            # (nt,) なら「時間依存・高度一様」と解釈して (nt, nz) へ broadcast
+            if gamma.size == nt_full:
+                reshaped["gamma"] = np.broadcast_to(gamma[:, None], (nt_full, nz))
+            # (nz,) の可能性もあるが、その場合は plot_Ri 側が扱えるので何もしない
+
+    # ---------- 2. g, p_surf を決定 ----------
+    g = float(attrs.get("g", 3.721))  # default: Mars
+    p_surf = 610.0                    # Pa, ひとまず一定値（既存実装と合わせる）
+
+    # ---------- 3. p, T, ρ を計算 ----------
+    p = calc_pressure(reshaped, p_surf, g)
+    temperature = calc_temperature(reshaped, p, p_surf)
+    rho = calc_density(reshaped, p, temperature)
+    # fields = {"p": p, "T": temperature, "rho": rho}  # 必要なら今後拡張
+
+    # ---------- 4. Ri 関連の計算とプロット ----------
+    ri_results = compute_vertical_gradients_and_ri(reshaped, g=g)
+
+    ri_out_dir = out_root / "Ri_lastday"
+    ri_out_dir.mkdir(exist_ok=True, parents=True)
+
+    plot_last_day_gradients_and_ri(
+        reshaped,
+        ri_results,
+        out_dir=str(ri_out_dir),
+        vlim_grad=0.05,
+        ri_range=(-4, 0.25, 4),
+    )
+
+    # ---------- 5. 最後の1日データを準備して混合 ----------
+    prepared = prepare_last_day_inputs(reshaped, rho=rho, ri_results=ri_results, g=g)
+    mom_mixed, u_mixed, applied_idx, top_idx_list = apply_momentum_mixing_last_day(
+        prepared,
+        ri_upper=ri_upper,
+        require_positive=require_positive,
+    )
+
+    mix_out_dir = out_root / "mixing_lastday"
+    mix_out_dir.mkdir(parents=True, exist_ok=True)
+
+    # A/B: pcolormesh 図（混合前後の運動量・風速）
+    plot_mixing_results_pcolormesh(
+        reshaped,
+        prepared,
+        mom_mixed,
+        u_mixed,
+        out_dir=str(mix_out_dir),
+    )
+
+    # C: 運動量プロファイル
+    plot_before_after_profiles(
+        prepared,
+        mom_mixed,
+        applied_idx,
+        top_idx_list,
+        out_dir=str(mix_out_dir),
+        max_plots=None,
+    )
+
+    # C': 風速プロファイル
+    plot_before_after_wind_profiles(
+        prepared,
+        u_mixed,
+        applied_idx,
+        top_idx_list,
+        directory=str(mix_out_dir),
+        max_plots=None,
+    )
+
+    # ---------- 6. 地表付近の風速タイムシリーズ ----------
+    ts_png = mix_out_dir / "near_surface_wind_timeseries.png"
+    plot_near_surface_wind_timeseries(
+        reshaped,
+        prepared,
+        u_mixed,
+        level_index=level_index,
+        out_path=str(ts_png),
+    )
+
+    ts_csv = mix_out_dir / "near_surface_wind_timeseries.csv"
+    _save_near_surface_timeseries(prepared, u_mixed, level_index, ts_csv)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="最後の1日について Ri と運動量混合（&地表風）を解析する簡易スクリプト"
+    )
+    parser.add_argument(
+        "case_directory",
+        help="N_*.nc が入っている 1 ケースのディレクトリパス",
+    )
+    parser.add_argument(
+        "--out-root",
+        type=str,
+        default=None,
+        help="解析結果の出力先ルート（省略時は <case_directory>/analysis_lastday）",
+    )
+    parser.add_argument(
+        "--level-index",
+        type=int,
+        default=0,
+        help="near-surface とみなす鉛直レベル index (default: 0)",
+    )
+    parser.add_argument(
+        "--ri-upper",
+        type=float,
+        default=0.25,
+        help="混合の Ri しきい値 (default: 0.25)",
+    )
+    parser.add_argument(
+        "--require-positive",
+        action="store_true",
+        help="True の場合、0<Ri<ri_upper のときのみ混合する",
+    )
+
+    args = parser.parse_args()
+    case_dir = Path(args.case_directory)
+    out_root = Path(args.out_root) if args.out_root is not None else None
+
+    run_lastday_analysis_for_case(
+        case_dir,
+        out_root=out_root,
+        level_index=args.level_index,
+        ri_upper=args.ri_upper,
+        require_positive=args.require_positive,
+    )
+
+
+if __name__ == "__main__":
+    main()
