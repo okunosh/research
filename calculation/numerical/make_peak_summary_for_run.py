@@ -512,6 +512,7 @@ def make_peak_summary_for_run(
         row = {
             "run_id": run_id,
             "directory": rel_directory,
+            "t_max": t_max, 
             "Ls": Ls_value,                 # run_id 由来で固定
             "flow_regime": flow_regime,     # 追加: Super/Sub/Critical or None
             "alpha": alpha,                 # NetCDF の alpha

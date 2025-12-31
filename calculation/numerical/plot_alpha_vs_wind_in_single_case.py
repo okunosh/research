@@ -41,6 +41,7 @@ def make_figure(
     alpha_all: bool = False,
     gamma_val: float = None,
     theta0_val: float = None,
+    use_cases_t_max: float = 86400 * 3,
 ):
     """CSV を読み込んで Figure を返す。
     
@@ -50,6 +51,10 @@ def make_figure(
         フィルタリング対象の gamma 値。None の場合は全て使用。
     theta0_val : float, optional
         フィルタリング対象の theta_0 値。None の場合は全て使用。
+    use_cases_t_max : float, optional
+        解析対象として採用する最小の t_max [sec]。
+        t_max がこの値以下（<=）のケースは「想定した時間まで計算できていない」とみなし、
+        描画対象から除外する。
     """
 
     df = pd.read_csv(csv_path)
@@ -67,12 +72,17 @@ def make_figure(
         "u_altitude_at_min",
         "gamma",
         "theta_0",
+        "t_max",
     ]
     missing = [c for c in cols_needed if c not in df.columns]
     if missing:
         raise ValueError(f"Columns missing in CSV: {missing}")
 
     df_plot = df.dropna(subset=cols_needed).copy()
+
+    # --- 計算が十分に進んでいないケースを除外 ---
+    # t_max は [sec] を想定。
+    df_plot = df_plot[df_plot["t_max"] > float(use_cases_t_max)]
 
     # gamma, theta_0 でのフィルタリング
     if gamma_val is not None:
@@ -301,6 +311,16 @@ def main():
         action="store_true",
         help="Show figure instead of saving it.",
     )
+    parser.add_argument(
+        "--use-cases-t-max",
+        type=float,
+        default=86400 * 3,
+        help=(
+            "Minimum required t_max [sec] for a case to be plotted. "
+            "Rows with t_max <= this value are excluded. "
+            "Default: 259200 (=86400*3)."
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -308,7 +328,26 @@ def main():
 
     # gamma, theta_0 のグループを抽出して表示
     df_raw = pd.read_csv(csv_path)
+
+    # t_max 列の存在を確認（秒単位）
+    if "t_max" not in df_raw.columns:
+        raise ValueError(
+            "Column 't_max' is missing in CSV. "
+            "Please add 't_max' [sec] to the peak_summary CSV as discussed."
+        )
+
     df_raw = df_raw.dropna(subset=["gamma", "theta_0"])
+
+    # --- 計算が十分に進んでいないケースを除外 ---
+    # 方針: t_max <= use_cases_t_max の行は描画対象から外す
+    before_n = len(df_raw)
+    df_raw = df_raw[df_raw["t_max"] > float(args.use_cases_t_max)]
+    after_n = len(df_raw)
+    dropped_n = before_n - after_n
+    print(
+        f"[INFO] use-cases-t-max filter: t_max > {args.use_cases_t_max:.0f} sec "
+        f"(dropped {dropped_n} / {before_n} rows, remaining {after_n} rows)"
+    )
     
     groups = df_raw[["gamma", "theta_0"]].drop_duplicates().sort_values(
         by=["gamma", "theta_0"]
@@ -333,6 +372,7 @@ def main():
             alpha_all=args.alpha_all,
             gamma_val=gamma_val,
             theta0_val=theta0_val,
+            use_cases_t_max=args.use_cases_t_max,
         )
 
         if args.show:
